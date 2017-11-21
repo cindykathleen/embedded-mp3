@@ -1,8 +1,11 @@
 #include "vs1053b.hpp"
 #include "spi.hpp"
 #include <cstring>
+#include <cmath>
 
 #define SPI     (Spi::getInstance())
+
+//// Need some kind of graceful fail for some functions like SetXDCS
 
 static SCI_reg_t RegisterMap[] = {
     [MODE]        = { .reg_num=MODE,        .can_write=true,  .reset_value=0x4000, .clock_cycles=80,   .reg_value=0 };
@@ -26,7 +29,7 @@ static SCI_reg_t RegisterMap[] = {
 inline bool VS1053b::SetXDCS(bool value)
 {
     // Can't set XDCS low when XCS is also low
-    if (!GetXCS() && !value) 
+    if (!GetXCS() && value == false) 
     {
         return false;
     }
@@ -45,7 +48,7 @@ inline bool VS1053b::GetXDCS()
 inline bool VS1053b::SetXCS(bool value)
 {
     // Can't set XCS low when XDCS is also low
-    if (!GetXDCS() && !value) 
+    if (!GetXDCS() && value == false) 
     {
         return false;
     }
@@ -95,24 +98,27 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
 {
     uint16_t data = 0;
 
-    if (ReceiveStreamData(reg, &data, 1))
+    // Wait until DREQ goes high
+    while (!GetDREQ());
+
+    // Select XCS
+    if (!SetXCS(false))
     {
-        RegisterMap[reg].reg_value = data;            
-    }
-    else
-    {
+        printf("[VS1053b::TransferSCICommand] Failed to select XCS as XDCS is already active!\n");
         return false;
     }
+    data |= SPI.ReceiveByte() << 8;
+    data |= SPI.ReceiveByte();
+    SetXCS(true);
+
+    return true;
 }
 
 inline bool VS1053b::UpdateRemoteRegister(SCI_reg reg)
 {
-    // Split reg_value into 2-bytes
-    uint8_t reg_value[] = { RegisterMap[reg].reg_value >> 8, RegisterMap[reg].reg_value & 0xFF };
-
     if (RegisterMap[reg].can_write)
     {
-        return TransferStreamData(RegisterMap[reg].reg_num, reg_value, 2);
+        return TransferSCICommand(reg);
     }
     else
     {
@@ -127,6 +133,31 @@ inline void VS1053b::BlockMicroSeconds(uint16_t microseconds)
 
     while (swatch.getElapsedTime() < microseconds);
 }
+
+float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
+{
+    UpdateLocalRegister(CLOCKF);
+
+    uint8_t multiplier  = RegisterMap[CLOCKF].reg_value >> 13;          // [15:13]
+    uint8_t adder       = (RegisterMap[CLOCKF].reg_value >> 12) & 0x3;  // [12:11]
+    uint16_t frequency  = RegisterMap[CLOCKF].reg_value & 0x07FF;       // [10:0]
+
+    uint32_t XTALI = (frequency * 4000 + 8000000);
+    uint32_t CLKI  = XTALI * (multiplier + adder);
+
+    if (is_clockf)
+    {
+        float microseconds_per_cycle = 1000.0f * 1000.0f / XTALI;
+    }
+    else
+    {
+        float microseconds_per_cycle = 1000.0f * 1000.0f / CLKI;
+    }
+
+    return ceil(microseconds_per_cycle * clock_cycles) + 1;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 VS1053b::VS1053b(vs1053b_gpio_init_t init) :    RESET(init.port_reset, init.pin_reset),
                                                 DREQ(init.port_dreq,   init.pin_dreq),
@@ -145,6 +176,10 @@ VS1053b::VS1053b(vs1053b_gpio_init_t init) :    RESET(init.port_reset, init.pin_
 
 void VS1053b::SystemInit()
 {
+    // Pins initial state
+    SetReset(false);
+    SetXCS(true);
+    SetXDCS(true);
     SetReset(true);
 
     uint16_t mode_default_state = 0;
@@ -170,6 +205,8 @@ void VS1053b::SystemInit()
 
 bool VS1053b::TransferSingleData(uint16_t address, uint8_t data)
 {
+    // Does not handle XCS because parent function should handle it
+
     if (IsValidAddress(address))
     {
         SPI.SendByte(OPCODE_WRITE);
@@ -185,6 +222,8 @@ bool VS1053b::TransferSingleData(uint16_t address, uint8_t data)
 
 bool VS1053b::ReceiveSingleData(uint16_t address, uint8_t *data)
 {
+    // Does not handle XCS because parent function should handle it
+
     *data = 0;
 
     if (IsValidAddress(address))
@@ -200,8 +239,40 @@ bool VS1053b::ReceiveSingleData(uint16_t address, uint8_t *data)
     }
 }
 
+bool VS1053b::TransferSCICommand(SCI_reg reg)
+{
+    // Wait until DREQ goes high
+    while (!GetDREQ());
+
+    // Select XCS
+    if (!SetXCS(false))
+    {
+        printf("[VS1053b::TransferSCICommand] Failed to select XCS as XDCS is already active!\n");
+        return false;
+    }
+    // High byte first
+    SPI.SendByte(OPCODE_WRITE);
+    SPI.SendByte(reg);
+    SPI.SendByte(RegisterMap[reg].reg_value >> 8);
+    SPI.SendByte(RegisterMap[reg].reg_value & 0xFF);
+    // Deselect XCS
+    SetXCS(true);
+
+    // CLOCKF is the only register where the calculation is based on XTALI not CLKI
+    const bool reg_is_clockf = (CLOCKF == reg);
+
+    // Delay amount of time after writing to SCI register to safely execute other commands
+    uint8_t delay_us = ClockCyclesToMicroSeconds(RegisterMap[reg].clock_cycles, reg_is_clockf);
+    BlockMicroSeconds(delay_us);
+
+    return true;
+}
+
 bool VS1053b::TransferStreamData(uint16_t address, uint8_t *data, uint16_t size)
 {
+    // Wait until DREQ goes high
+    while (!GetDREQ());
+
     if (IsValidAddress(address))
     {
         XDCS.SetLow();
@@ -209,11 +280,15 @@ bool VS1053b::TransferStreamData(uint16_t address, uint8_t *data, uint16_t size)
         {
             TransferSingleData(address + i, data[i]);
             
-            // Toggle XDCS every 32 bytes
+            // Every 32 bytes some checks need to be performed
             if (i > 0 && i%32 == 0)
             {
+                // Toggle XDCS
                 XDCS.SetHigh();
                 XDCS.SetLow();
+
+                // Wait until DREQ goes high
+                while (!GetDREQ());
             }
         }
         XDCS.SetHigh();

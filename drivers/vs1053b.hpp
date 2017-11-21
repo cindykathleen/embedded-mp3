@@ -296,7 +296,7 @@ private:
 
     // @description     : Reads the register on the device and updates the RegisterMap
     // @param reg       : Enum of the register
-    inline bool UpdateLocalRegister(SCI_reg reg);
+    inline void UpdateLocalRegister(SCI_reg reg);
 
     // @description     : Writes to the register from the value in the RegisterMap
     // @param reg       : Enum of the register
