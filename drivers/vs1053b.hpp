@@ -1,4 +1,7 @@
+#pragma once
 #include <stop_watch.hpp>
+#include "L5_Application/drivers/gpio_input.hpp"
+#include "L5_Application/drivers/gpio_output.hpp"
 #include "L5_Application/drivers/spi.hpp"
 #include "L5_Application/drivers/i2c.hpp"
 
@@ -27,22 +30,22 @@ typedef struct
 
 typedef enum 
 {
-    MODE            = 0x0,
-    STATUS          = 0x1,
-    BASS            = 0x2,
-    CLOCKF          = 0x3,
-    DECODE_TIME     = 0x4,
-    AUDATA          = 0x5,
-    WRAM            = 0x6,
-    WRAMADDR        = 0x7,
-    HDAT0           = 0x8,
-    HDAT1           = 0x9,
-    AIADDR          = 0xA,
-    VOL             = 0xB,
-    AICTRL0         = 0xC,
-    AICTRL1         = 0xD,
-    AICTRL2         = 0xE,
-    AICTRL3         = 0xF,
+    MODE        = 0x0,
+    STATUS      = 0x1,
+    BASS        = 0x2,
+    CLOCKF      = 0x3,
+    DECODE_TIME = 0x4,
+    AUDATA      = 0x5,
+    WRAM        = 0x6,
+    WRAMADDR    = 0x7,
+    HDAT0       = 0x8,
+    HDAT1       = 0x9,
+    AIADDR      = 0xA,
+    VOL         = 0xB,
+    AICTRL0     = 0xC,
+    AICTRL1     = 0xD,
+    AICTRL2     = 0xE,
+    AICTRL3     = 0xF,
     SCI_reg_last_invalid
 } SCI_reg;
 
@@ -103,10 +106,10 @@ typedef struct
 
 // Status of the VS1053b driver, for other tasks to see
 vs1053b_status_t StatusMap[] = {
-    .fast_forward_mode  = false,
-    .rewind_mode        = false,
-    .low_power_mode     = false,
-    .playing            = false,
+    .fast_forward_mode = false,
+    .rewind_mode       = false,
+    .low_power_mode    = false,
+    .playing           = false,
 };
 
 class VS1053b
@@ -122,7 +125,7 @@ public:
     VS1053b(vs1053b_gpio_init_t init);
 
     // @description     : Initializes the VS1053B system, all the pins, and the default states of the registers
-    void VS1053b::SystemInit();
+    void SystemInit();
 
     // @description     : Sends data to the device
     // @param address   : Address of register to write the data to
@@ -130,13 +133,6 @@ public:
     // @param size      : Size of array to transfer
     // @returns         : True for valid address, false for invalid
     bool TransferData(uint16_t address, uint8_t *data, uint32_t size);
-
-    // @description     : Receives data from the device
-    // @param address   : Address of register to read the data from
-    // @param data      : The data byte returned
-    // @param size      : Size of array to receive
-    // @returns         : True for valid address, false for invalid
-    bool ReceiveData(uint16_t address, uint8_t *data, uint32_t size);
 
     // @description     : Perform a hardware reset
     void HardwareReset();
@@ -213,17 +209,13 @@ public:
     // @returns         : The current sample rate
     uint16_t GetSampleRate();
 
-    // @description     : Get the contents of the SCI status register
-    // @returns         : Contents of the status register
-    uint16_t GetStatus();
+    // @description     : Returns the current status struct
+    // @returns         : Current status struct
+    vs1053b_status_t GetStatus();
 
     // @description     : Read the current decoding time register
     // @returns         : The current decoding time in seconds
     uint16_t GetCurrentDecodedTime();
-
-    // @description     : Returns the current status struct
-    // @returns         : Current status struct
-    vs1053b_status_t GetStatus();
 
     // @description     : Reads the current playback position of the mp3 file
     // @returns         : Playback position in milliseconds
@@ -239,6 +231,10 @@ public:
 
 private:
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                         MEMBER VARIABLES                                       //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // Pins for VS1053B interfacing
     // Must be initialized before using driver
     GpioOutput RESET;
@@ -252,30 +248,42 @@ private:
     // Stores a struct of status information to be transmitted
     vs1053b_status_t Status;
 
+    // Stores a map of structs of each register's values and information
+    SCI_reg_t RegisterMap[SCI_reg_last_invalid];
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                         INLINE FUNCTIONS                                       //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // @description     : Sets the XDCS pin
     // @param value     : Value to set the pin to
+    // @returns         : True for set, false for did not set
     inline bool SetXDCS(bool value);
 
     // @description     : Reads the XDCS pin
+    // @returns         : Value of pin
     inline bool GetXDCS();
 
     // @description     : Sets the XCS pin
+    // @returns         : True for set, false for did not set
     inline bool SetXCS(bool value);
 
     // @description     : Reads the XCS pin
     // @param value     : Value to set the pin to
+    // @returns         : Value of pin
     inline bool GetXCS();
 
     // @description     : Reads the DREQ pin
+    // @returns         : Value of pin
     inline bool GetDREQ();
+
+    // @description     : Reads possibility of new operation from DREQ pin
+    // @returns         : True for ready to go, false for wait
+    inline bool DeviceReady();
 
     // @description     : Sets the RESET pin
     // @param value     : Value to set the pin to
     inline void SetReset(bool value);
-
-    // @description     : Requests if the device is capable of receiving data
-    // @returns         : True for available, false for not available
-    inline bool Request();
 
     // @description     : Pull XCS line to select or deselect the device
     // @param on        : True for pull line low + select device, False for pull line high + deselect device
@@ -301,6 +309,15 @@ private:
     // @returns         : True for successfully set, false for unsuccessful
     inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                        PRIVATE FUNCTIONS                                       //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // @description     : Read a register from RAM that is not a command register
+    // @param address   : Address of register to read the data from
+    // @returns         : Value of register
+    uint16_t ReadRam(uint16_t address)
+
     // @description     : Sends local SCI register value to remote
     // @param reg       : The specified register
     // @returns         : True for successful, false for unsuccessful
@@ -313,7 +330,7 @@ private:
     // @description     : Sends the end fill byte for x amount of transfers
     // @param size      : The amount of end fill bytes to send
     // @returns         : True for successful, false for unsuccessful
-    bool SendEndFillByte(uint16_t address, uint16_t size);
+    bool SendEndFillByte(uint16_t size);
 
     // @description     : Updates the header struct with fresh information
     void UpdateHeaderInformation();
@@ -326,11 +343,14 @@ private:
     // @param clock_cycles  : The number of cycles to apply to the calculation
     // @param is_clockf     : True to show the register it is calculating for is CLOCKF, which requires a different calculation
     //                        from the other registers since it is based off of XTALI instead of CLKI
-    float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf);
+    float ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf);
 
     // @description     : Reads the current status information from the device and updates the struct
     void UpdateStatusMap();
 
     // @description     : Reads the value of each register and updates the register map
     void UpdateRegisterMap();
+
+    // @description     : Decode time register does not clear automatically so must be explicitly cleared
+    void ClearDecodeTime();
 };
