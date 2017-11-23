@@ -7,6 +7,10 @@
 
 //// Need some kind of graceful fail for some functions like SetXDCS
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                        PRIVATE FUNCTIONS                                       //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 static SCI_reg_t RegisterMap[] = {
     [MODE]        = { .reg_num=MODE,        .can_write=true,  .reset_value=0x4000, .clock_cycles=80,   .reg_value=0 };
     [STATUS]      = { .reg_num=STATUS,      .can_write=true,  .reset_value=0x000C, .clock_cycles=80,   .reg_value=0 };
@@ -104,7 +108,7 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
     // Select XCS
     if (!SetXCS(false))
     {
-        printf("[VS1053b::TransferSCICommand] Failed to select XCS as XDCS is already active!\n");
+        printf("[VS1053b::UpdateLocalRegister] Failed to select XCS as XDCS is already active!\n");
         return false;
     }
     data |= SPI.ReceiveByte() << 8;
@@ -116,21 +120,38 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
 
 inline bool VS1053b::UpdateRemoteRegister(SCI_reg reg)
 {
-    if (RegisterMap[reg].can_write)
+    // Transfer local register value to remote
+    return (RegisterMap[reg].can_write) ? (TransferSCICommand(reg)) : (false);
+}
+
+inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
+{
+    if (bit_value)
     {
-        return TransferSCICommand(reg);
+        RegisterMap[reg].reg_value |= (1 << bit);
     }
     else
     {
-        return false;
+        RegisterMap[reg].reg_value &= ~(1 << bit);
     }
 }
 
-inline void VS1053b::BlockMicroSeconds(uint16_t microseconds)
+uint8_t GetEndFillByte()
+{
+    const uint16_t end_fill_byte_address = 0x1E06;
+    uint16_t byte = 0;
+    ReceiveDoubleByte(end_fill_byte_address, &byte);
+
+    // Cast to 8bit to ignore upper 8 bits
+    return (uint8_t)byte;
+}
+
+void VS1053b::BlockMicroSeconds(uint16_t microseconds)
 {
     MicroSecondStopWatch swatch;
     swatch.start();
 
+    // TODO add a fault condition
     while (swatch.getElapsedTime() < microseconds);
 }
 
@@ -157,7 +178,9 @@ float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
     return ceil(microseconds_per_cycle * clock_cycles) + 1;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                        PUBLIC FUNCTIONS                                        //
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 VS1053b::VS1053b(vs1053b_gpio_init_t init) :    RESET(init.port_reset, init.pin_reset),
                                                 DREQ(init.port_dreq,   init.pin_dreq),
@@ -203,40 +226,102 @@ void VS1053b::SystemInit()
     UpdateRemoteRegister(VOL);
 }
 
-bool VS1053b::TransferSingleData(uint16_t address, uint8_t data)
+bool VS1053b::TransferData(uint16_t address, uint8_t *data, uint32_t size)
 {
-    // Does not handle XCS because parent function should handle it
+    // Wait until DREQ goes high
+    while (!GetDREQ());
 
-    if (IsValidAddress(address))
+    if (size < 1)
     {
-        SPI.SendByte(OPCODE_WRITE);
-        SPI.SendByte(address);
-        SPI.SendByte(data);
-        return true;
+        return false;
     }
     else
     {
-        return false;
+        if (IsValidAddress(address))
+        {
+            XDCS.SetLow();
+            SPI.SendByte(OPCODE_WRITE);
+            SPI.SendByte(address);
+
+            for (int i=0; i<size; i++)
+            {
+                SPI.SendByte(data[i]);
+                
+                // Every 32 bytes some checks need to be performed
+                if (i > 0 && i%32 == 0)
+                {
+                    // Toggle XDCS
+                    XDCS.SetHigh();
+                    XDCS.SetLow();
+
+                    // Wait until DREQ goes high
+                    while (!GetDREQ());
+                }
+            }
+
+            XDCS.SetHigh();
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 }
 
-bool VS1053b::ReceiveSingleData(uint16_t address, uint8_t *data)
+bool VS1053b::ReceiveData(uint16_t address, uint8_t *data, uint32_t size)
 {
-    // Does not handle XCS because parent function should handle it
+    // Make sure it is clear
+    memset(data, 0, sizeof(uint8_t) * size);
 
-    *data = 0;
+    // Wait until DREQ goes high
+    while (!GetDREQ());
 
-    if (IsValidAddress(address))
-    {
-        SPI.SendByte(OPCODE_READ);
-        SPI.SendByte(address);
-        *data = Spi.ReceiveByte();
-        return true;
-    }
-    else
+    if (data < 1)
     {
         return false;
     }
+    else
+    {
+        if (IsValidAddress(address))
+        {
+            XDCS.SetLow();
+            SPI.SendByte(OPCODE_READ);
+            SPI.SendByte(address);
+
+            for (int i=0; i<size; i++)
+            {
+                *data++ = SPI.ReceiveByte();
+
+                // Every 32 bytes some checks need to be performed
+                if (i > 0 && i%32 == 0)
+                {
+                    // Toggle XDCS
+                    XDCS.SetHigh();
+                    XDCS.SetLow();
+
+                    // Wait until DREQ goes high
+                    while (!GetDREQ());
+                }
+            }
+
+            XDCS.SetHigh();
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+}
+
+bool VS1053b::CancelDecoding()
+{
+    static const uint8_t CANCEL_BIT = (1 << 3);
+
+    UpdateLocalRegister(MODE);
+    RegisterMap[MODE].reg_value |= CANCEL_BIT;
+    return UpdateRemoteRegister(MODE);
 }
 
 bool VS1053b::TransferSCICommand(SCI_reg reg)
@@ -268,101 +353,27 @@ bool VS1053b::TransferSCICommand(SCI_reg reg)
     return true;
 }
 
-bool VS1053b::TransferStreamData(uint16_t address, uint8_t *data, uint16_t size)
-{
-    // Wait until DREQ goes high
-    while (!GetDREQ());
-
-    if (IsValidAddress(address))
-    {
-        XDCS.SetLow();
-        for (int i=0; i<size; i++)
-        {
-            TransferSingleData(address + i, data[i]);
-            
-            // Every 32 bytes some checks need to be performed
-            if (i > 0 && i%32 == 0)
-            {
-                // Toggle XDCS
-                XDCS.SetHigh();
-                XDCS.SetLow();
-
-                // Wait until DREQ goes high
-                while (!GetDREQ());
-            }
-        }
-        XDCS.SetHigh();
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
 bool VS1053b::SendEndFillByte(uint16_t address, uint16_t size)
 {
-    uint8_t end_fill_byte = GetEndFillByte();
+    const uint8_t end_fill_byte = GetEndFillByte();
+    // Uses an array of 32 bytes instead of the 2048+ bytes to conserve stack space
+    uint8_t efb_array[32] = { 0 };
+    memset(efb_array, end_fill_byte, sizeof(uint8_t) * 32);
+
+    const uint8_t cycles    = size / 32;
+    const uint8_t remainder = size % 32;
 
     if (IsValidAddress(address))
     {
-        XDCS.SetLow();
-        for (int i=0; i<size; i++)
+        for (int i=0; i<cycles; i++)
         {
-            TransferSingleData(address + i, end_fill_byte);
-            
-            // Toggle XDCS every 32 bytes
-            if (i > 0 && i%32 == 0)
-            {
-                XDCS.SetHigh();
-                XDCS.SetLow();
-            }
+            TransferData(address + i * 32, efb_array, 32);
         }
-        XDCS.SetHigh();
+        if (remainder > 0)
+        {
+            TransferData(address + cycles * 32, efb_array, remainder);
+        }
         return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-uint16_t VS1053b::ReceiveStreamData(uint16_t address, uint8_t *data, uint16_t size)
-{
-    memset(data, 0, sizeof(uint16_t) * size);
-
-    XDCS.SetLow();
-    for (int i=0; i<size; i++) 
-    {
-        // May need some logic to determine if receivable
-        if (!ReceiveSingleData(address + i, data[i]))
-        {
-            return i;
-        }
-
-        // Toggle XDCS every 32 bytes
-        if (i > 0 && i%32 == 0)
-        {
-            XDCS.SetHigh();
-            XDCS.SetLow();
-        }
-    }
-    XDCS.SetHigh();
-    return size;
-}
-
-bool VS1053b::CancelDecoding()
-{
-    uint16_t data = 0;
-
-    if (ReceiveStreamData(RegisterMap[MODE].reg_num, &data, 1))
-    {
-        // Update local register value
-        RegisterMap[MODE].reg_value = data;
-        // Set cancel bit
-        RegisterMap[MODE].reg_value |= (1 << 3);
-        // Update remote register value
-        return UpdateRemoteRegister(MODE);
     }
     else
     {
@@ -712,8 +723,8 @@ void VS1053b::StartPlayback(uint8_t *mp3, uint32_t size)
     // Send mp3 file
     TransferStreamData(address, mp3, size);
 
-    // To signal the end of the mp3 file need to set 2048 bytes of EndFillByte
-    SendEndFillByte(address, 2048);
+    // To signal the end of the mp3 file need to set 2052 bytes of EndFillByte
+    SendEndFillByte(address, 2052);
 
     // Wait 50 ms buffer time between playbacks
     vTaskDelay(50 / portTICK_PERIOD_MS);

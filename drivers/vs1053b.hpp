@@ -2,8 +2,6 @@
 #include "L5_Application/drivers/spi.hpp"
 #include "L5_Application/drivers/i2c.hpp"
 
-// XTALI: Input clock frequency
-
 typedef enum
 {
     OPCODE_READ  = 0x03,
@@ -115,35 +113,40 @@ class VS1053b
 {
 public:
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                         SYSTEM FUNCTIONS                                       //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // @description     : Constructor, initializes the device
     // @param init      : Port and pin number for all GPIOS necessary for device to function
     VS1053b(vs1053b_gpio_init_t init);
 
-    // @description     : Sends a single byte to the device
+    // @description     : Initializes the VS1053B system, all the pins, and the default states of the registers
+    void VS1053b::SystemInit();
+
+    // @description     : Sends data to the device
     // @param address   : Address of register to write the data to
     // @param data      : The data byte to write
+    // @param size      : Size of array to transfer
     // @returns         : True for valid address, false for invalid
-    bool TransferSingleData(uint16_t address, uint16_t data);
+    bool TransferData(uint16_t address, uint8_t *data, uint32_t size);
 
-    // @description     : Receives a single byte from the device
+    // @description     : Receives data from the device
     // @param address   : Address of register to read the data from
     // @param data      : The data byte returned
-    // @returns         : True for valid address, false for invalid
-    bool ReceiveSingleData(uint16_t address, uint16_t *data);
-
-    // @description     : Sends an array of bytes to the device
-    // @param address   : The starting address of registers to write the data to
-    // @param data      : Pointer to array of data to write
-    // @param size      : Size of array
-    // @returns         : True for successful, false for unsuccessful
-    bool TransferStreamData(uint16_t address, uint16_t *data, uint16_t size);
-
-    // @description     : Receives an array of bytes to the device
-    // @param address   : The starting address of registers to read the data from
-    // @param data      : Pointer to array of data to write
     // @param size      : Size of array to receive
-    // @returns         : Size of stream received
-    uint16_t ReceiveStreamData(uint16_t address, uint16_t *data, uint16_t size);
+    // @returns         : True for valid address, false for invalid
+    bool ReceiveData(uint16_t address, uint8_t *data, uint32_t size);
+
+    // @description     : Perform a hardware reset
+    void HardwareReset();
+
+    // @description     : Perform a software reset
+    void SoftwareReset();
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                           API FUNCTIONS                                        //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // @description     : Cancels the decoding if in the process of decoding
     // @returns         : True for successful, false for unsuccessful
@@ -161,10 +164,6 @@ public:
     // @param on        : True for on, false for off
     void SetClockDivider(bool on);
 
-    // @description     : Get the contents of the SCI status register
-    // @returns         : Contents of the status register
-    uint16_t GetStatus();
-
     // @description     : Sets the base register value
     // @param amplitude : The value of the register, possible values from 0x0 to 0xF
     // @param freq_limit: The lower frequency
@@ -175,34 +174,14 @@ public:
     // @param freq_limit: The lower frequency
     void SetTrebleControl(uint8_t amplitude, uint8_t freq_limit);
 
-    // @description     : Read the current decoding time register
-    // @returns         : The current decoding time in seconds
-    uint16_t GetCurrentDecodedTime();
-
     // @description       : Sets the sample rate register
     // @param sample_rate : The sample rate to set to, possible values range from 0 to 48k
     void SetSampleRate(uint16_t sample_rate);
-
-    // @description     : Get the current sample rate
-    // @returns         : The current sample rate
-    uint16_t GetSampleRate();
 
     // @description     : Sets the volume register, left and right volumes can be different
     // @param left_vol  : Volume of the left speaker
     // @param right_vol : Volume of the right speaker
     void SetVolume(uint16_t left_vol, uint16_t right_vol);
-
-    void UpdateHeaderInformation();
-
-    mp3_header_t GetHeaderInformation();
-
-    void GetBitRate();
-
-    // @description     : Perform a hardware reset
-    void HardwareReset();
-
-    // @description     : Perform a software reset
-    void SoftwareReset();
 
     // @description     : Turns on or off the lower power mode
     // @param on        : True for on, false for off
@@ -226,20 +205,37 @@ public:
     // @param on        : True for on, false for off
     void SetRewindMode(bool on);
 
-    // @description     : TBD state machine
-    void PlaybackStateMachine();
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                         GETTER FUNCTIONS                                       //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // @description     : Reads the current status information from the device and updates the struct
-    void UpdateStatusMap();
+    // @description     : Get the current sample rate
+    // @returns         : The current sample rate
+    uint16_t GetSampleRate();
 
-    // @description     : Reads the value of each register and updates the register map
-    void UpdateRegisterMap();
+    // @description     : Get the contents of the SCI status register
+    // @returns         : Contents of the status register
+    uint16_t GetStatus();
+
+    // @description     : Read the current decoding time register
+    // @returns         : The current decoding time in seconds
+    uint16_t GetCurrentDecodedTime();
 
     // @description     : Returns the current status struct
     // @returns         : Current status struct
     vs1053b_status_t GetStatus();
 
+    // @description     : Reads the current playback position of the mp3 file
+    // @returns         : Playback position in milliseconds
     uint32_t GetPlaybackPosition();
+
+    // @description     : Parses the header information of the current mp3 file
+    // @returns         : Struct of the header information
+    mp3_header_t GetHeaderInformation();
+
+    // @description     : Reads the current bit rate setting
+    // @returns         : The current bit rate
+    uint32_t GetBitRate();
 
 private:
 
@@ -277,10 +273,6 @@ private:
     // @param value     : Value to set the pin to
     inline void SetReset(bool value);
 
-    // @description     : Reads the endFillByte parameter from the device
-    // @returns         : The endFillByte
-    uint8_t GetEndFillByte();
-
     // @description     : Requests if the device is capable of receiving data
     // @returns         : True for available, false for not available
     inline bool Request();
@@ -303,13 +295,42 @@ private:
     inline bool UpdateRemoteRegister(SCI_reg reg);
 
     // @description     : Change a single bit of one of the SCI registers
-    // @param register  : Specifies which SCI register
+    // @param reg       : Specifies which SCI register
     // @param bit       : Specifies which bit of the SCI register
     // @param bit_value : Specifies value of bit to set, true for 1, false for 0
     // @returns         : True for successfully set, false for unsuccessful
-    bool ChangeSCIRegister(SCI_reg register, uint8_t bit, bool bit_value);
+    inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value);
 
-    // @description        : Blocks task until the timer reaches the specified time
-    // @param microseconds : Number of microseconds to block for
-    inline void BlockMicroSeconds(uint16_t microseconds);
+    // @description     : Sends local SCI register value to remote
+    // @param reg       : The specified register
+    // @returns         : True for successful, false for unsuccessful
+    bool TransferSCICommand(SCI_reg reg);
+
+    // @description     : Reads the endFillByte parameter from the device
+    // @returns         : The endFillByte
+    uint8_t GetEndFillByte();
+
+    // @description     : Sends the end fill byte for x amount of transfers
+    // @param size      : The amount of end fill bytes to send
+    // @returns         : True for successful, false for unsuccessful
+    bool SendEndFillByte(uint16_t address, uint16_t size);
+
+    // @description     : Updates the header struct with fresh information
+    void UpdateHeaderInformation();
+
+    // @description         : Blocks task until the timer reaches the specified time
+    // @param microseconds  : Number of microseconds to block for
+    void BlockMicroSeconds(uint16_t microseconds);
+
+    // @description         : Computes the microseconds needed to delay for a specified amount of clock cycles
+    // @param clock_cycles  : The number of cycles to apply to the calculation
+    // @param is_clockf     : True to show the register it is calculating for is CLOCKF, which requires a different calculation
+    //                        from the other registers since it is based off of XTALI instead of CLKI
+    float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf);
+
+    // @description     : Reads the current status information from the device and updates the struct
+    void UpdateStatusMap();
+
+    // @description     : Reads the value of each register and updates the register map
+    void UpdateRegisterMap();
 };
