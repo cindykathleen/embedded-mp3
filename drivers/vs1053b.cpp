@@ -1,7 +1,7 @@
-#include "vs1053b.hpp"
-#include "spi.hpp"
 #include <cstring>
 #include <cmath>
+#include "vs1053b.hpp"
+#include "spi.hpp"
 
 #define SPI     (Spi::getInstance())
 
@@ -89,14 +89,14 @@ void VS1053b::SystemInit()
     UpdateRemoteRegister(VOL);
 }
 
-bool VS1053b::TransferData(uint8_t *data, uint32_t size)
+vs1053b_transfer_status_t VS1053b::TransferData(uint8_t *data, uint32_t size)
 {
     // Wait until DREQ goes high
     while (!DeviceReady()) taskYIELD();
 
     if (size < 1)
     {
-        return false;
+        return TRANSFER_FAILED;
     }
     else
     {
@@ -111,6 +111,18 @@ bool VS1053b::TransferData(uint8_t *data, uint32_t size)
                 SPI.SendByte(data[i]);
             }
             XDCS.SetHigh();
+
+            // Check for pending cancellation request
+            if (StatusMap.waiting_for_cancel)
+            {
+                // Check cancel bit
+                UpdateLocalRegister(MODE);
+                // Cancel succeeded, exit
+                if (RegisterMap[MODE].reg_value & (1 << 3))
+                {
+                    return TRANSFER_CANCELLED;
+                }
+            }
             
             // Wait until DREQ goes high
             while (!DeviceReady()) taskYIELD();
@@ -131,7 +143,7 @@ bool VS1053b::TransferData(uint8_t *data, uint32_t size)
                 while (!DeviceReady()) taskYIELD();
             }
         }
-        return true;
+        return TRANSFER_SUCCESS;
     }
 }
 
@@ -193,7 +205,11 @@ bool VS1053b::CancelDecoding()
 
     UpdateLocalRegister(MODE);
     RegisterMap[MODE].reg_value |= CANCEL_BIT;
-    return UpdateRemoteRegister(MODE);
+    UpdateRemoteRegister(MODE);
+
+    StatusMap.waiting_for_cancel = true;
+    // TODO: Handle cancel logic, needs state machine
+    // SendEndFillByte(2052);
 }
 
 void VS1053b::SetEarSpeakerMode(ear_speaker_mode_t mode)
@@ -346,7 +362,7 @@ void VS1053b::SetLowPowerMode(bool on)
     StatusMap.low_power_mode = on;
 }
 
-void VS1053b::StartPlayback(uint8_t *mp3, uint32_t size)
+void VS1053b::PlayEntireSong(uint8_t *mp3, uint32_t size)
 {
     // Clear decode time
     ClearDecodeTime();
@@ -367,6 +383,37 @@ void VS1053b::StartPlayback(uint8_t *mp3, uint32_t size)
     vTaskDelay(50 / portTICK_PERIOD_MS);
 
     StatusMap.playing = false;
+}
+
+void VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment)
+{
+    // If first segment, set up for playback
+    if (!StatusMap.playing)
+    {
+        // Clear decode time
+        ClearDecodeTime();
+
+        // Send 2 dummy bytes to SDI
+        static const uint8_t dummy_short[] = { 0x00, 0x00 };
+        TransferData(&dummy_short, 2);
+
+        StatusMap.playing = true;
+    }
+
+    // Send mp3 file
+    TransferData(mp3, size);
+
+    // Clean up if last segment
+    if (last_segment)
+    {
+        // To signal the end of the mp3 file need to set 2052 bytes of EndFillByte
+        SendEndFillByte(2052);
+
+        // Wait 50 ms buffer time between playbacks
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+
+        StatusMap.playing = false;
+    }
 }
 
 void SwitchPlayback(uint8_t *mp3, uint32_t size)
@@ -508,6 +555,11 @@ uint32_t VS1053b::GetBitRate()
     UpdateHeaderInformation();
 
     return Header.bit_rate;
+}
+
+bool VS1053b::IsPlaying()
+{
+    return StatusMap.playing;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

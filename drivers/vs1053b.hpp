@@ -3,7 +3,13 @@
 #include "L5_Application/drivers/gpio_input.hpp"
 #include "L5_Application/drivers/gpio_output.hpp"
 #include "L5_Application/drivers/spi.hpp"
-#include "L5_Application/drivers/i2c.hpp"
+
+typedef enum
+{
+    TRANSFER_SUCCESS,
+    TRANSFER_FAILED,
+    TRANSFER_CANCELLED
+} vs1053b_transfer_status_t;
 
 typedef enum
 {
@@ -102,14 +108,16 @@ typedef struct
     bool rewind_mode;
     bool low_power_mode;
     bool playing;
+    bool waiting_for_cancel;
 } __attribute__((packed)) vs1053b_status_t;
 
 // Status of the VS1053b driver, for other tasks to see
-vs1053b_status_t StatusMap[] = {
-    .fast_forward_mode = false,
-    .rewind_mode       = false,
-    .low_power_mode    = false,
-    .playing           = false,
+vs1053b_status_t StatusMap = {
+    .fast_forward_mode  = false,
+    .rewind_mode        = false,
+    .low_power_mode     = false,
+    .playing            = false,
+    .waiting_for_cancel = false,
 };
 
 class VS1053b
@@ -131,8 +139,8 @@ public:
     // @param address   : Address of register to write the data to
     // @param data      : The data byte to write
     // @param size      : Size of array to transfer
-    // @returns         : True for valid address, false for invalid
-    bool TransferData(uint16_t address, uint8_t *data, uint32_t size);
+    // @returns         : Status after transfer
+    vs1053b_transfer_status_t TransferData(uint16_t address, uint8_t *data, uint32_t size);
 
     // @description     : Perform a hardware reset
     void HardwareReset();
@@ -186,7 +194,13 @@ public:
     // @description     : Starts playback mode by sending an mp3 file to the device
     // @param mp3       : Array of mp3 file bytes
     // @param size      : Size of the arrray of file
-    void StartPlayback(uint8_t *mp3, uint32_t size);
+    void PlayEntireSong(uint8_t *mp3, uint32_t size);
+
+    // @description        : Plays a segment of a song
+    // @param mp3          : Array of mp3 file bytes
+    // @param size         : Size of the arrray of file
+    // @param last_segment : True for end of file, runs clean up routine, false for not end of file
+    void VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment);
 
     // @description     : Switches current playback to another mp3 file
     // @param mp3       : Array of mp3 file bytes
@@ -228,6 +242,8 @@ public:
     // @description     : Reads the current bit rate setting
     // @returns         : The current bit rate
     uint32_t GetBitRate();
+
+    bool IsPlaying();
 
 private:
 
@@ -316,7 +332,7 @@ private:
     // @description     : Read a register from RAM that is not a command register
     // @param address   : Address of register to read the data from
     // @returns         : Value of register
-    uint16_t ReadRam(uint16_t address)
+    uint16_t ReadRam(uint16_t address);
 
     // @description     : Sends local SCI register value to remote
     // @param reg       : The specified register
