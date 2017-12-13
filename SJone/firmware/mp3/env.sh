@@ -3,7 +3,7 @@
 BASE=/home/jpan127/Desktop/RJD-MP3/SJone
 
 # SJSUOne Board Settings:
-SJSUONEDEV="/dev/tty.usbserial-AI04D2D0" # Set this to your board ID
+SJSUONEDEV="/dev/ttyUSB0" # Set this to your board ID
 SJSUONEBAUD=38400
 
 # Project Target Settings:
@@ -20,7 +20,7 @@ LIB_DIR="$BASE/firmware/lib"
 # Make system settings:
 # Number of jobs = 4
 # Tune this to nthreads (f.eks. my system has a quad core with two threads per core = 4 threads)
-MAKEFLAGS=" -j 4"
+# MAKEFLAGS=" -j"
 
 # Export everything to the environment
 export PATH
@@ -29,4 +29,4 @@ export ENTITY
 export LIB_DIR
 export SJSUONEDEV
 export SJSUONEBAUD
-export MAKEFLAGS
+# export MAKEFLAGS

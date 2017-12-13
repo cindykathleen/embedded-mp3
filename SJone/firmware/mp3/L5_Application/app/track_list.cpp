@@ -115,3 +115,13 @@ void track_list_next(void)
 {
     TrackList.RotateBackward();
 }
+
+uint16_t track_list_get_size(void)
+{
+    return TrackList.GetBufferSize();
+}
+
+void track_list_shuffle(void)
+{
+    TrackList.ShuffleList();
+}

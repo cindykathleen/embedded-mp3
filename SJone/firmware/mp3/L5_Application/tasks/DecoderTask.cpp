@@ -22,8 +22,8 @@ typedef struct
     mp3_header_S *header;
     uint32_t bit_rate;
 
-    file_name_S *curr_track;     // Name of track currently playing
-    const char  *next_track; // Name of track queued up next to play
+    file_name_S *curr_track;    // Name of track currently playing
+    const char  *next_track;    // Name of track queued up next to play
 } MP3_status_S;
 
 // GPIO ports to interface with VS1053b
@@ -75,7 +75,6 @@ static void ReverseSegment(uint32_t size_of_segment)
     }
 }
 
-
 // MP3 state machine
 static void HandleStateLogic(void)
 {
@@ -87,7 +86,12 @@ static void HandleStateLogic(void)
     switch (Status.next_state)
     {
         case IDLE:
-            // Do nothing
+            // Make sure file is not open, for next time transitioning to PLAY state
+            if (mp3_is_file_open())
+            {
+                printf("Closing file...\n");
+                mp3_close_file();
+            }
             break;
 
         case PLAY:
@@ -247,7 +251,25 @@ static void CheckButtons(void)
                             break;
                         case PACKET_OPCODE_SET_PLAY_NEXT:
                             Status.next_track = (const char *)(CommandPacket.command.half_word);
-                            Status.next_state = PLAY;
+                            bool found = false;
+                            uint16_t track_size = track_list_get_size();
+                            for (int i=0; i<track_size; i++)
+                            {
+                                if (strcmp(Status.curr_track->short_name, Status.next_track) != 0)
+                                {
+                                    found = true;
+                                }
+                                track_list_next();
+                            }
+                            if (!found)
+                            {
+                                printf("[MP3Task] Specified track to play not found in playlist: %s\n", Status.next_track);
+                                Status.next_state = IDLE;
+                            }
+                            else
+                            {
+                                Status.next_state = PLAY;
+                            }
                             break;
                         case PACKET_OPCODE_SET_PLAY_PREV:
                             // Handle logic to go back in circular buffer
@@ -345,6 +367,10 @@ void DecoderTask(void *p)
     // Initialize the track list
     track_list_init();
 
+    uint16_t size = track_list_get_size();
+
+    track_list_shuffle();
+
     // Main loop
     while (1)
     {
@@ -352,32 +378,31 @@ void DecoderTask(void *p)
         // HandleStateLogic();
         // CheckRxQueue();
 
-        uint32_t n = 12345;
-        const char *x = "xxxxxxxxxxx";
-        const char *y = "yyyyyyyyyyy";
-        LOG_ERROR("test1 : %i\n", n);
-        LOG_ERROR("test2 : %s\n", x);
-        LOG_STATUS("test3 : %s\n", y);
-        LOG_STATUS("test4 : %i %s %s\n", n, x, y);
+        // uint32_t n = 12345;
+        // const char *x = "xxxxxxxxxxx";
+        // const char *y = "yyyyyyyyyyy";
+        // LOG_ERROR("test1 : %i\n", n);
+        // LOG_ERROR("test2 : %s\n", x);
+        // LOG_STATUS("test3 : %s\n", y);
+        // LOG_STATUS("test4 : %i %s %s\n", n, x, y);
 
         // memset(Buffer, 0, sizeof(Buffer));
 
-        // Status.curr_track = track_list_get_current_track();
-        // printf("Current Track: %s\n", Status.curr_track->short_name);
+        Status.curr_track = track_list_get_current_track();
+        printf("Current Track: %s\n", Status.curr_track->short_name);
 
-        // mp3_open_file(Status.curr_track);
-        // mp3_get_header_info(Buffer);
+        mp3_open_file(Status.curr_track);
+        mp3_get_header_info(Buffer);
 
-        // // Zeds dead is too long name
+        // Zeds dead is too long name
         // printf("Artist : %s\n", mp3_get_artist());
         // printf("Title  : %s\n", mp3_get_title());
         // printf("Genre  : %s\n", mp3_get_genre());
-
-        // mp3_close_file();
-        // track_list_next();
-        // printf("--------------------------------------\n");
+        mp3_close_file();
+        track_list_next();
+        printf("--------------------------------------\n");
 
         xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
-        DELAY_MS(5000);
+        DELAY_MS(1000);
     }
 }

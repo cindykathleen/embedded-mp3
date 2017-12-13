@@ -24,3 +24,12 @@ extern QueueHandle_t MessageTxQueue;
 #define WATCHDOG_RX_BIT      (1 << 1)
 #define WATCHDOG_TX_BIT      (1 << 2)
 extern EventGroupHandle_t watchdog_event_group;
+
+// Make size of diagnostic packet payload
+#define MAX_PACKET_SIZE (128)
+
+// Helper macros for logging to server
+// Use these instead of directly using log_to_server()
+#define LOG_INFO(message, ...)   (log_to_server(PACKET_TYPE_INFO,   message, ## __VA_ARGS__))
+#define LOG_ERROR(message, ...)  (log_to_server(PACKET_TYPE_ERROR,  message, ## __VA_ARGS__))
+#define LOG_STATUS(message, ...) (log_to_server(PACKET_TYPE_STATUS, message, ## __VA_ARGS__))

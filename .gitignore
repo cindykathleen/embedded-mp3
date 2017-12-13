@@ -4,3 +4,5 @@
 *.hex
 *.lst
 *.map
+*.bin
+firmware/mp3/_can_dbc/*

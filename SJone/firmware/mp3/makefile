@@ -7,6 +7,8 @@ SJDEV_LIB_DIR 	?= lib
 # Affects what DBC is generated for SJSUOne board
 ENTITY 			?= DBG
 
+SHELL           := /bin/bash
+
 # IMPORTANT: Must be accessible via the PATH variable!!!
 CC              = arm-none-eabi-gcc
 CPPC            = arm-none-eabi-g++
@@ -20,36 +22,36 @@ BIN_DIR			= bin
 DBC_DIR			= _can_dbc
 
 CFLAGS = -mcpu=cortex-m3 						\
-    -mthumb -Os -fmessage-length=0 				\
-    -ffunction-sections -fdata-sections 		\
-    -Wall -Wshadow -Wlogical-op 				\
-    -Wfloat-equal -DBUILD_CFG_MPU=0 			\
-    -fabi-version=0 							\
-    -fno-exceptions 							\
-    -I"$(LIB_DIR)/" 							\
-    -I"$(LIB_DIR)/newlib" 						\
-    -I"$(LIB_DIR)/L0_LowLevel" 					\
-    -I"$(LIB_DIR)/L1_FreeRTOS" 					\
-    -I"$(LIB_DIR)/L1_FreeRTOS/include" 			\
-    -I"$(LIB_DIR)/L1_FreeRTOS/portable" 		\
-    -I"$(LIB_DIR)/L1_FreeRTOS/portable/no_mpu" 	\
-    -I"$(LIB_DIR)/L2_Drivers" 					\
-    -I"$(LIB_DIR)/L2_Drivers/base" 				\
-    -I"$(LIB_DIR)/L3_Utils" 					\
-    -I"$(LIB_DIR)/L3_Utils/tlm" 				\
-    -I"$(LIB_DIR)/L4_IO" 						\
-    -I"$(LIB_DIR)/L4_IO/fat" 					\
-    -I"$(LIB_DIR)/L4_IO/wireless" 				\
-    -I"$(LIB_DIR)/L5_Application" 				\
-    -I"L2_Drivers" 								\
-    -I"L3_Utils" 								\
-    -I"L4_IO" 									\
-    -I"L5_Application" 							\
-    -I"L5_Application/drivers" 					\
-    -I"L5_Application/app" 						\
-    -I"L5_Application/source" 					\
-    -I"$(DBC_DIR)" 								\
-    -MMD -MP -c
+	-mthumb -Os -fmessage-length=0 				\
+	-ffunction-sections -fdata-sections 		\
+	-Wall -Wshadow -Wlogical-op 				\
+	-Wfloat-equal -DBUILD_CFG_MPU=0 			\
+	-fabi-version=0 							\
+	-fno-exceptions 							\
+	-I"$(LIB_DIR)/" 							\
+	-I"$(LIB_DIR)/newlib" 						\
+	-I"$(LIB_DIR)/L0_LowLevel" 					\
+	-I"$(LIB_DIR)/L1_FreeRTOS" 					\
+	-I"$(LIB_DIR)/L1_FreeRTOS/include" 			\
+	-I"$(LIB_DIR)/L1_FreeRTOS/portable" 		\
+	-I"$(LIB_DIR)/L1_FreeRTOS/portable/no_mpu" 	\
+	-I"$(LIB_DIR)/L2_Drivers" 					\
+	-I"$(LIB_DIR)/L2_Drivers/base" 				\
+	-I"$(LIB_DIR)/L3_Utils" 					\
+	-I"$(LIB_DIR)/L3_Utils/tlm" 				\
+	-I"$(LIB_DIR)/L4_IO" 						\
+	-I"$(LIB_DIR)/L4_IO/fat" 					\
+	-I"$(LIB_DIR)/L4_IO/wireless" 				\
+	-I"$(LIB_DIR)/L5_Application" 				\
+	-I"L2_Drivers" 								\
+	-I"L3_Utils" 								\
+	-I"L4_IO" 									\
+	-I"L5_Application" 							\
+	-I"L5_Application/drivers" 					\
+	-I"L5_Application/app" 						\
+	-I"L5_Application/source" 					\
+	-I"$(DBC_DIR)" 								\
+	-MMD -MP -c
 
 LINKFLAGS = -mcpu=cortex-m3 \
 	-Os -mthumb \
@@ -77,7 +79,7 @@ LIST				= $(EXECUTABLE:.elf=.lst)
 SIZE				= $(EXECUTABLE:.elf=.siz)
 MAP					= $(EXECUTABLE:.elf=.map)
 
-.PHONY: build clean flash telemetry monitor
+.PHONY: build source clean clear cbuild flash telemetry monitor load
 
 build: $(DBC_DIR) $(OBJ_DIR) $(BIN_DIR) $(SIZE) $(LIST) $(HEX)
 
@@ -156,14 +158,29 @@ $(BIN_DIR):
 	@echo 'Creating Binary Folder: $<'
 	mkdir $(BIN_DIR)
 
+source:
+	source env.sh
+
 clean:
 	rm -fR $(OBJ_DIR) $(BIN_DIR) $(DBC_DIR)
 
+clear:
+	clear
+
+cbuild:
+	make clean
+	clear
+	make build
+
 flash: build
-	hyperload $(SJSUONEDEV) $(HEX)
+	./../../../tools/Hyperload/hyperload $(SJSUONEDEV) $(HEX)
 
 telemetry:
-	telemetry
+	./../../../tools/Telemetry/telemetry
 
 monitor:
-	telemetry
+	gtkterm -p $(SJSUONEDEV) -s $(SJSUONEBAUD)
+
+load:
+	make flash
+	make monitor

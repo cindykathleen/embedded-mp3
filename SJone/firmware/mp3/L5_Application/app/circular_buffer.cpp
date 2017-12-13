@@ -26,23 +26,6 @@ CircularBuffer::~CircularBuffer()
     }
 }
 
-// void CircularBuffer::InsertFront(char* element)
-// {
-//     Node *new_node    = new Node;
-//     new_node->prev    = NULL;
-//     new_node->next    = Head;
-//     new_node->element = element;
-
-//     Head = new_node;
-
-//     if (BufferSize == 0)
-//     {
-//         Tail = new_node;
-//     }
-
-//     ++BufferSize;
-// }
-
 void CircularBuffer::InsertBack(char *element)
 {
     Node *new_node = new Node;
@@ -163,32 +146,42 @@ void CircularBuffer::ShuffleList()
     Node **array = new Node*[BufferSize];
     Node *temp = Head;
     uint16_t counter = 0;
-    while (temp)
+    while (temp && counter < BufferSize)
     {
         array[counter++] = temp;
         temp = temp->next;
     }
 
-    // Fisher Yates Shuffle
-    for (int i=1; i<BufferSize; i++)
+    printf("%d vs %d\n", counter, BufferSize);
+    for (int i=0; i<counter; i++)
     {
-        uint16_t random = rand() % i;
+        printf("%i : %s\n", i, array[i]->element);
+    }
+
+    // Fisher Yates Shuffle
+    for (int i=0; i<counter; i++)
+    {
+        uint16_t random = rand() % MAX(i, 1);
+        fprintf(stderr, "%d\n", random);
         temp = array[random];
         array[random] = array[i];
         array[i] = temp;
     }
 
+    // Reorganize each node's next/prev with their new next and previous nodes
     Head = array[0];
-    temp = Head;
-    temp->prev = NULL;
-    for (int i=1; i<BufferSize; i++)
+    for (int i=0; i<counter; i++)
     {
-        temp->next = array[i];
-        array[i]->prev = temp;
-        temp = temp->next;
-    }
+        temp = array[i];
 
+        if (i < counter-1) temp->next = array[i+1];
+        else               temp->next = NULL;
+
+        if (i > 0)         temp->prev = array[i-1];
+        else               temp->prev = NULL;
+    }
     Tail = temp;
+    
     temp = NULL;
     delete [] array;
 }

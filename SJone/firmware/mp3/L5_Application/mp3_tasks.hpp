@@ -2,15 +2,6 @@
 #include <stdarg.h>
 #include "common.hpp"
 
-// Make size of diagnostic packet payload
-#define MAX_PACKET_SIZE (128)
-
-// Helper macros for logging to server
-// Use these instead of directly using log_to_server()
-#define LOG_INFO(message, ...)   (log_to_server(PACKET_TYPE_INFO,   message, ## __VA_ARGS__))
-#define LOG_ERROR(message, ...)  (log_to_server(PACKET_TYPE_ERROR,  message, ## __VA_ARGS__))
-#define LOG_STATUS(message, ...) (log_to_server(PACKET_TYPE_STATUS, message, ## __VA_ARGS__))
-
 // Struct containing original name, and name without extension
 // The original name is necessary to open the file from the FatFS
 // The short name is necessary for displaying on the screen
@@ -185,6 +176,10 @@ void track_list_next(void);
 //                the name from the file extension
 // @returns     : A struct containing the original name, and the name without extension
 file_name_S* track_list_get_current_track(void);
+
+uint16_t track_list_get_size(void);
+
+void track_list_shuffle(void);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                            mp3_struct                                         //
