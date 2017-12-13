@@ -28,13 +28,13 @@
  * This ISR Function need needs to be named precisely to override "WEAK" ISR
  * handler defined at startup.cpp
  */
-extern "C"
-{
-    void UART2_IRQHandler()
-    {
-        Uart2::getInstance().handleInterrupt();
-    }
-}
+// extern "C"
+// {
+//     void UART2_IRQHandler()
+//     {
+//         Uart2::getInstance().handleInterrupt();
+//     }
+// }
 
 bool Uart2::init(unsigned int baudRate, int rxQSize, int txQSize)
 {
