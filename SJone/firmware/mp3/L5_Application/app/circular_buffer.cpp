@@ -205,11 +205,11 @@ uint16_t CircularBuffer::GetBufferSize()
 
 void CircularBuffer::PrintBuffer()
 {
-    Node *temp;
+    Node *temp = Head;
     uint16_t counter = 0;
     while (temp)
     {
-        printf("%i : %s", temp->element);
+        printf("%u : %s", counter++, temp->element);
     }
     temp = NULL;
 }

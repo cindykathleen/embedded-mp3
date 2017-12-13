@@ -9,8 +9,6 @@
 
 #define SPI     (Spi0::getInstance())
 
-//// Need some kind of graceful fail for some functions like SetXDCS
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -793,8 +791,6 @@ bool VS1053b::WaitForDREQ(uint32_t timeout_us)
 
 uint16_t VS1053b::ReadRam(uint16_t address)
 {
-    uint16_t data = 0;
-
     // Wait until DREQ goes high
     if (!WaitForDREQ(100000))
     {
@@ -836,8 +832,6 @@ uint16_t VS1053b::ReadRam(uint16_t address)
 
 bool VS1053b::WriteRam(uint16_t address, uint16_t value)
 {
-    uint16_t data = 0;
-
     // Wait until DREQ goes high
     if (!WaitForDREQ(100000))
     {

@@ -55,7 +55,7 @@ void WatchdogTask(void *p)
                 printf("[WatchdogTask] Decoder Task and RX Task and TX Task failed to respond.\n");
                 break;
             default:
-                printf("[WatchdogTask] Bits returned incorrect...:%04X\n", (uint32_t)(bits & all_bits));
+                printf("[WatchdogTask] Bits returned incorrect: %lX\n", (uint32_t)(bits & all_bits));
                 break;
         }
 

@@ -20,8 +20,7 @@ void RxTask(void *p)
 
     // Status flags
     parser_status_E status = PARSER_IDLE;
-    uint32_t counter = 0;
-    uint8_t byte     = 0;
+    uint8_t byte = 0;
 
     // Main loop
     while (1)
@@ -35,6 +34,7 @@ void RxTask(void *p)
             // Check status of state machine
             switch (status)
             {
+                case PARSER_IDLE:
                 case PARSER_IN_PROGRESS:
                     // Do nothing, keep going
                     break;

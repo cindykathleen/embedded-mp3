@@ -222,11 +222,11 @@ bool mp3_is_file_open(void);
 
 void mp3_get_header_info(uint8_t *buffer);
 
-char* mp3_get_artist(void);
+const char* mp3_get_artist(void);
 
-char* mp3_get_title(void);
+const char* mp3_get_title(void);
 
-char* mp3_get_genre(void);
+const char* mp3_get_genre(void);
 
 bool mp3_rewind_segments(uint32_t segments);
 

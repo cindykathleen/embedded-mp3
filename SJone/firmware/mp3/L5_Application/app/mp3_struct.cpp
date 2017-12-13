@@ -310,6 +310,7 @@ bool mp3_rewind_segments(uint32_t segments)
         mp3_go_to_offset(0);
         current_song.direction = DIR_FORWARD;
         current_song.segment   = 0;
+        return true;
     }
     // Rewind segments
     else if (mp3_go_to_offset( (current_song.segment - segments) * MP3_SEGMENT_SIZE ))
@@ -324,21 +325,21 @@ bool mp3_rewind_segments(uint32_t segments)
     }
 }
 
-char* mp3_get_artist(void)
+const char* mp3_get_artist(void)
 {
     if (!current_song.file_is_open)                                       return NULL;
     else if (current_song.file_is_open && current_song.artist[0] == 0x00) return "Unknown";
     else                                                                  return current_song.artist;
 }
 
-char* mp3_get_title(void)
+const char* mp3_get_title(void)
 {
     if (!current_song.file_is_open)                                       return NULL;
     else if (current_song.file_is_open && current_song.title[0] == 0x00)  return "Unknown";
     else                                                                  return current_song.title;
 }
 
-char* mp3_get_genre(void)
+const char* mp3_get_genre(void)
 {
     if (!current_song.file_is_open)                                       return NULL;
     else if (current_song.file_is_open && current_song.genre[0] == 0x00)  return "Unknown";

@@ -21,7 +21,7 @@ void TxTask(void *p)
 
     // Status flags
     bool currently_sending = false;
-    uint32_t tx_buffer_pointer = 0;
+    uint8_t tx_buffer_pointer = 0;
 
     // Main loop
     while (1)

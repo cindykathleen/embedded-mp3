@@ -1,6 +1,6 @@
 #!/bin/bash
 # Setup a base directory:
-BASE=/Users/ryanhennings/Developer/SJSU-Dev
+BASE=/home/jpan127/Desktop/RJD-MP3/SJone
 
 # SJSUOne Board Settings:
 SJSUONEDEV="/dev/tty.usbserial-AI04D2D0" # Set this to your board ID

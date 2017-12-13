@@ -37,16 +37,10 @@ obj/./L5_Application/main.o: L5_Application/main.cpp \
  /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L4_IO/wireless/src/mesh_typedefs.h \
  /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L4_IO/wireless/src/mesh_config.h \
  /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L4_IO/wireless/src/mesh_typedefs.h \
- L5_Application/examples/examples.hpp L5_Application/shared_handles.h \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/uart3.hpp \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/base/uart_dev.hpp \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/base/char_dev.hpp \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L0_LowLevel/LPC17xx.h \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L3_Utils/singleton_template.hpp \
- L5_Application/examples/rn_xv_task.hpp \
- L5_Application/periodic_scheduler/periodic_callback.h \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/uart2.hpp \
- /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L3_Utils/utilities.h
+ L5_Application/mp3_tasks.hpp L5_Application/common.hpp \
+ /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/event_groups.h \
+ /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/timers.h \
+ /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/task.h
 
 L5_Application/tasks.hpp:
 
@@ -124,24 +118,12 @@ L5_Application/tasks.hpp:
 
 /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L4_IO/wireless/src/mesh_typedefs.h:
 
-L5_Application/examples/examples.hpp:
+L5_Application/mp3_tasks.hpp:
 
-L5_Application/shared_handles.h:
+L5_Application/common.hpp:
 
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/uart3.hpp:
+/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/event_groups.h:
 
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/base/uart_dev.hpp:
+/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/timers.h:
 
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/base/char_dev.hpp:
-
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L0_LowLevel/LPC17xx.h:
-
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L3_Utils/singleton_template.hpp:
-
-L5_Application/examples/rn_xv_task.hpp:
-
-L5_Application/periodic_scheduler/periodic_callback.h:
-
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L2_Drivers/uart2.hpp:
-
-/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L3_Utils/utilities.h:
+/home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/L1_FreeRTOS/include/task.h:
