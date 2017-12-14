@@ -8,14 +8,20 @@
 #define MAX_TRACK_LIST_SIZE (20)
 
 // Linked list of track list
-static CircularBuffer TrackList;
-
-// Only one file name struct is needed at any time
-static file_name_S file_names = { 0 };
-
+// static CircularBuffer TrackList;
+static char **TrackList;
+static uint8_t TrackListSize = 0;
+static uint8_t CurrentTrackNumber = 0;
 
 void track_list_init(void)
 {
+    TrackList = new char*[32];
+    for (int i=0; i<32; i++)
+    {
+        TrackList[i] = new char[32];
+        memset(TrackList[i], 0, 32);
+    }
+
     // File system variables
     DIR directory;
     FILINFO file_info;
@@ -45,7 +51,7 @@ void track_list_init(void)
 
         // Use the name pointer that has the longest name
         char *file_name = (strlen(&(file_info.fname[0])) > strlen(file_info.lfname)) ?
-                          (&(file_info.fname[0])): (file_info.lfname);
+                          (&(file_info.fname[0])) : (file_info.lfname);
 
         printf("%s | %s\n", file_info.fname, file_info.lfname);
 
@@ -60,14 +66,16 @@ void track_list_init(void)
                 // If file extension == "mp3" then add to the track list
                 if ((*(file_name+index) == 'm') && (*(file_name+index+1) == 'p') && (*(file_name+index+2) == '3'))
                 {
-                    TrackList.InsertBack(file_name);        
-                    printf("[File %lu] Name: %s Size: %lu\n", counter++, file_name, file_info.fsize);
+                    // TrackList.InsertBack(file_name);
+                    memcpy(TrackList[TrackListSize++], file_name, strlen(file_name));
+                    printf("[File %lu] Name: %s Size: %lu\n", counter++, TrackList[TrackListSize-1], file_info.fsize);
                 }
                 // If file extension == "MP3" then add to the track list
                 else if ((*(file_name+index) == 'M') && (*(file_name+index+1) == 'P') && (*(file_name+index+2) == '3'))
                 {
-                    TrackList.InsertBack(file_name);        
-                    printf("[File %lu] Name: %s Size: %lu\n", counter++, file_name, file_info.fsize);
+                    // TrackList.InsertBack(file_name);
+                    memcpy(TrackList[TrackListSize++], file_name, strlen(file_name));
+                    printf("[File %lu] Name: %s Size: %lu\n", counter++, TrackList[TrackListSize-1], file_info.fsize);
                 }
             }
         }        
@@ -76,23 +84,35 @@ void track_list_init(void)
     printf("--------------------------------------\n");
 }
 
-void track_list_print(void)
-{
-    uint16_t buffer_size = TrackList.GetBufferSize();
-    for (int i=0; i<buffer_size; i++)
-    {
-        printf("%d : %s\n", i, TrackList.GetHead());
-        TrackList.RotateBackward();
-    }
-}
+// void track_list_print(void)
+// {
+//     uint16_t buffer_size = TrackList.GetBufferSize();
+//     for (int i=0; i<buffer_size; i++)
+//     {
+//         printf("%d : %s\n", i, TrackList.GetHead());
+//         TrackList.RotateBackward();
+//     }
+// }
 
-file_name_S* track_list_get_current_track(void)
+file_name_S track_list_get_current_track(void)
 {
+    file_name_S file_names = { 0 };
+
+    // printf("Total: %d\n", TrackListSize);
+
     // Full name
-    char *full_name = TrackList.GetHead();
-    memcpy(file_names.full_name, full_name, MAX_NAME_LENGTH);
+    char *full_name = TrackList[CurrentTrackNumber];
+    memcpy(file_names.full_name, full_name, strlen(full_name));
+    if (strlen(full_name) < 32)
+    {
+        file_names.full_name[strlen(full_name)] = '\0';
+    }
+    else
+    {
+        file_names.full_name[31] = '\0';
+    }
 
-    // Short name
+    // If there is no full name, then there is no short name
     if (!file_names.full_name)
     {
         memset(file_names.short_name, 0, MAX_NAME_LENGTH);
@@ -102,26 +122,59 @@ file_name_S* track_list_get_current_track(void)
         // Find where the dot is
         char *index_of_dot = strrchr(file_names.full_name, '.');
         uint32_t index = index_of_dot - file_names.full_name + 1;
-
+        index = MIN(index, 32);
         // Removes the file extension
         memcpy(file_names.short_name, file_names.full_name, index);
-        file_names.short_name[index-1] = '\0';
+        if (index < 32) file_names.short_name[index-1] = '\0';
+        else            file_names.short_name[31] = '\0';
     }
 
-    return &file_names;
+    // printf("FULL: %s\n",  file_names.full_name);
+    // printf("SHORT: %s\n", file_names.short_name);
+
+    return file_names;
 }
 
 void track_list_next(void)
 {
-    TrackList.RotateBackward();
+    // TrackList.RotateBackward();
+    ++CurrentTrackNumber;
+    if (CurrentTrackNumber == TrackListSize) CurrentTrackNumber = 0;
 }
 
 uint16_t track_list_get_size(void)
 {
-    return TrackList.GetBufferSize();
+    // return TrackList.GetBufferSize();
+    return TrackListSize;
 }
 
 void track_list_shuffle(void)
 {
-    TrackList.ShuffleList();
+    // TrackList.ShuffleList();
+}
+
+void track_list_get4(file_name_S file_names[4])
+{
+    uint8_t last_index = CurrentTrackNumber;
+
+    file_names[0] = track_list_get_current_track();
+    track_list_next();
+
+    if (TrackListSize > 1)
+    {
+        file_names[1] = track_list_get_current_track();
+        track_list_next();
+    }
+    if (TrackListSize > 2)
+    {
+        file_names[2] = track_list_get_current_track();
+        track_list_next();
+    }
+    if (TrackListSize > 3)
+    {
+        file_names[3] = track_list_get_current_track();
+        track_list_next();
+    }
+
+    CurrentTrackNumber = last_index;
 }

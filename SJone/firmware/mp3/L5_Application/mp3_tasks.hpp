@@ -175,11 +175,13 @@ void track_list_next(void);
 // @description : Retrieves the current track name from the ciruclar buffer and separates
 //                the name from the file extension
 // @returns     : A struct containing the original name, and the name without extension
-file_name_S* track_list_get_current_track(void);
+file_name_S track_list_get_current_track(void);
 
 uint16_t track_list_get_size(void);
 
 void track_list_shuffle(void);
+
+void track_list_get4(file_name_S file_names[4]);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                            mp3_struct                                         //

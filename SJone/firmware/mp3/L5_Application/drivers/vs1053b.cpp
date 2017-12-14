@@ -254,7 +254,10 @@ void VS1053b::CancelDecoding()
     UpdateRemoteRegister(MODE);
 
     // Set flag to request cancellation
-    Status.waiting_for_cancel = true;
+    // Status.waiting_for_cancel = true;
+    Status.playing = false;
+
+    printf("[VS1053b::CancelDecoding] Waiting for cancel...\n");
 }
 
 void VS1053b::SetEarSpeakerMode(ear_speaker_mode_t mode)
@@ -359,6 +362,36 @@ void VS1053b::SetVolume(uint8_t left_vol, uint8_t right_vol)
     RegisterMap[VOL].reg_value = volume;
 
     UpdateRemoteRegister(VOL);
+}
+
+void VS1053b::IncrementVolume(void)
+{
+    const uint8_t increment_step = 0xFF / 32;
+
+    uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
+    uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
+    left_vol  = (left_vol  + increment_step > 0xFF) ? (0xFF) : (left_vol  + increment_step);
+    right_vol = (right_vol + increment_step > 0xFF) ? (0xFF) : (right_vol + increment_step);
+    RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
+
+    UpdateRemoteRegister(VOL);
+
+    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
+}
+
+void VS1053b::DecrementVolume(void)
+{
+    const uint8_t increment_step = 0xFF / 32;
+
+    uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
+    uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
+    left_vol  = (left_vol  - increment_step < 0) ? (0) : (left_vol  - increment_step);
+    right_vol = (right_vol - increment_step < 0) ? (0) : (right_vol - increment_step);
+    RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
+
+    UpdateRemoteRegister(VOL);
+
+    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
 }
 
 void VS1053b::SetLowPowerMode(bool on)

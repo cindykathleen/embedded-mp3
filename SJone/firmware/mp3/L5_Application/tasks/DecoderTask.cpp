@@ -22,7 +22,7 @@ typedef struct
     mp3_header_S *header;
     uint32_t bit_rate;
 
-    file_name_S *curr_track;    // Name of track currently playing
+    file_name_S  curr_track;    // Name of track currently playing
     const char  *next_track;    // Name of track queued up next to play
 } MP3_status_S;
 
@@ -52,7 +52,7 @@ static MP3_status_S     Status = {
     .decode_time      = 0,
     .header           = NULL,
     .bit_rate         = 0,
-    .curr_track       = NULL,
+    .curr_track       = { 0 },
     .next_track       = NULL,
 };
 
@@ -101,7 +101,7 @@ static void HandleStateLogic(void)
                 // Reset values to default
                 last_segment = false;
                 // Open mp3 file
-                if (!mp3_open_file(Status.curr_track))
+                if (!mp3_open_file(&Status.curr_track))
                 {
                     Status.next_state = IDLE;
                     break;
@@ -135,18 +135,7 @@ static void HandleStateLogic(void)
 
             // printf("[MP3Task] Played segment %lu with %lu bytes.\n", segment_counter, current_segment_size);
 
-            // Handle transfer status
-            if (TRANSFER_CANCELLED == transfer_status)
-            {
-                if (Status.cancel_requested) printf("[MP3Task] Cancel successful.\n");
-                else                         printf("[MP3Task] Playback cancelled but never requested!\n");
-
-                // Set last segment flag to run clean up
-                last_segment = true;
-                // Reset flags
-                Status.cancel_requested = false;
-            }
-            else if (TRANSFER_FAILED == transfer_status)
+            if (TRANSFER_FAILED == transfer_status)
             {
                 printf("[MP3Task] Segment transfer failed. Stopping playback.\n");
                 Status.next_state = IDLE;
@@ -163,24 +152,17 @@ static void HandleStateLogic(void)
 
         case STOP:
             // If stop requested, is currently playing, and not recently requested
-            if (MP3Player.IsPlaying() && !Status.cancel_requested)
+            if (MP3Player.IsPlaying())
             {
                 // Stop playback
                 MP3Player.CancelDecoding();
-                // Go back to playing to finish the last segment(s)
-                Status.next_state = PLAY;
-                // Set the flag for cancel request
-                Status.cancel_requested = true;
-            }
-            // No need to cancel if not currently playing
-            else
-            {
+
                 if (mp3_is_file_open())
                 {
                     printf("Closing file...\n");
                     mp3_close_file();
                 }
-                printf("[MP3Task] No need to cancel, not currently playing.\n");
+                // printf("[MP3Task] No need to cancel, not currently playing.\n");
                 Status.next_state = IDLE;
             }
             break;
@@ -193,7 +175,7 @@ static void CheckButtons(void)
     // If playing, stop, else play
     if (Button0::getInstance().IsPressed())
     {
-        if      (Status.next_state == IDLE) Status.next_state = PLAY;
+        if      (Status.next_state == IDLE || Status.next_state == STOP) Status.next_state = PLAY;
         else if (Status.next_state == PLAY) Status.next_state = STOP;
     }
     // Change track
@@ -201,17 +183,24 @@ static void CheckButtons(void)
     {
         track_list_next();
         Status.curr_track = track_list_get_current_track();
-        printf("Current Track: %s \n", Status.curr_track->short_name);
+        printf("Current Track: %s \n", Status.curr_track.short_name);
+        // mp3_get_header_info(Buffer);
+        memset(Buffer, 0, sizeof(Buffer));
+        // printf("Artist : %s\n", mp3_get_artist());
+        // printf("Title  : %s\n", mp3_get_title());
+        // printf("Genre  : %s\n", mp3_get_genre());
     }
     // Toggle fast forward mode
     else if (Button2::getInstance().IsPressed())
     {
-        MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+        // MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+        MP3Player.IncrementVolume();
     }
     // Toggle rewind mode
     else if (Button3::getInstance().IsPressed())
     {
-        mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+        // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+        MP3Player.DecrementVolume();
     }
 }
 
@@ -363,46 +352,27 @@ void DecoderTask(void *p)
 
     // Initialize the decoder
     MP3Player.SystemInit();
-    
-    // Initialize the track list
+
     track_list_init();
-
-    uint16_t size = track_list_get_size();
-
-    track_list_shuffle();
-
+    Status.curr_track = track_list_get_current_track();
+    
     // Main loop
     while (1)
     {
-        // CheckButtons();
-        // HandleStateLogic();
+        CheckButtons();
+        HandleStateLogic();
         // CheckRxQueue();
 
-        // uint32_t n = 12345;
-        // const char *x = "xxxxxxxxxxx";
-        // const char *y = "yyyyyyyyyyy";
-        // LOG_ERROR("test1 : %i\n", n);
-        // LOG_ERROR("test2 : %s\n", x);
-        // LOG_STATUS("test3 : %s\n", y);
-        // LOG_STATUS("test4 : %i %s %s\n", n, x, y);
+        // file_name_S file_names[4] = { 0 };
+        // track_list_get4(file_names);
 
-        // memset(Buffer, 0, sizeof(Buffer));
+        // printf("-------------------------------------\n");
+        // printf("1: %s\n", file_names[0].full_name);
+        // printf("2: %s\n", file_names[1].full_name);
+        // printf("3: %s\n", file_names[2].full_name);
+        // printf("4: %s\n", file_names[3].full_name);
 
-        Status.curr_track = track_list_get_current_track();
-        printf("Current Track: %s\n", Status.curr_track->short_name);
-
-        mp3_open_file(Status.curr_track);
-        mp3_get_header_info(Buffer);
-
-        // Zeds dead is too long name
-        // printf("Artist : %s\n", mp3_get_artist());
-        // printf("Title  : %s\n", mp3_get_title());
-        // printf("Genre  : %s\n", mp3_get_genre());
-        mp3_close_file();
-        track_list_next();
-        printf("--------------------------------------\n");
-
-        xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
-        DELAY_MS(1000);
+        // xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
+        // DELAY_MS(1000);
     }
 }

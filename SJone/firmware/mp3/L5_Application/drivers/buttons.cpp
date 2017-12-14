@@ -23,6 +23,6 @@ bool Button::IsPressed()
 void Button::Debounce()
 {
 	while (IsHigh());
-	vTaskDelay(300 / portTICK_PERIOD_MS);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
 	while (IsHigh());
 }

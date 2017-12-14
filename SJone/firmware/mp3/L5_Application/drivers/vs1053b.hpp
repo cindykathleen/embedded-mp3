@@ -188,6 +188,9 @@ public:
     // @param right_vol : Volume of the right speaker
     void SetVolume(uint8_t left_vol, uint8_t right_vol);
 
+    void IncrementVolume(void);
+    void DecrementVolume(void);
+
     // @description     : Turns on or off the lower power mode
     // @param on        : True for on, false for off
     void SetLowPowerMode(bool on);

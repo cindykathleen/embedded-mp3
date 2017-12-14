@@ -173,16 +173,6 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size)
     }
 }
 
-// void mp3_print_header(uint8_t *buffer)
-// {
-//     if (!current_song.file_is_open) return;
-
-//     const uint32_t max_header_size = 480;
-//     uint32_t current_segment_size;
-//     mp3_read_segment(buffer, max_header_size, &current_segment_size);
-//     mp3_ip3_parser(buffer, max_header_size);
-// }
-
 bool mp3_open_file(file_name_S *file_name)
 {
     if (current_song.file_is_open)
