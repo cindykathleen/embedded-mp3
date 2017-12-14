@@ -1,6 +1,7 @@
 #pragma once
 #include <stdarg.h>
 #include "common.hpp"
+#include "vs1053b.hpp"
 
 // Struct containing original name, and name without extension
 // The original name is necessary to open the file from the FatFS
@@ -82,6 +83,21 @@ typedef struct
     } command;
 
 } __attribute__((packed)) command_packet_S;
+
+// GPIO ports to interface with VS1053b
+static const vs1053b_gpio_init_t gpio_init = {
+    .port_reset = GPIO_PORT0,
+    .port_dreq  = GPIO_PORT0,
+    .port_xcs   = GPIO_PORT0,
+    .port_xdcs  = GPIO_PORT0,
+    .pin_reset  = 0,
+    .pin_dreq   = 1,
+    .pin_xcs    = 29,
+    .pin_xdcs   = 30,
+};
+
+// VS1053b object which handles the device drivers
+extern VS1053b MP3Player;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                          msg_protocol                                         //
@@ -172,6 +188,8 @@ void track_list_print(void);
 // Rotates the track list to switch to the next song
 void track_list_next(void);
 
+void track_list_prev(void);
+
 // @description : Retrieves the current track name from the ciruclar buffer and separates
 //                the name from the file extension
 // @returns     : A struct containing the original name, and the name without extension
@@ -216,6 +234,8 @@ uint32_t mp3_get_song_length_in_seconds(void);
 bool mp3_read_segment(uint8_t *buffer, uint32_t segment_size, uint32_t *current_segment_size);
 
 bool mp3_is_file_open(void);
+
+file_name_S mp3_get_name(void);
 
 void mp3_get_header_info(uint8_t *buffer);
 

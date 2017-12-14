@@ -142,6 +142,12 @@ void track_list_next(void)
     if (CurrentTrackNumber == TrackListSize) CurrentTrackNumber = 0;
 }
 
+void track_list_prev(void)
+{
+    --CurrentTrackNumber;
+    if (CurrentTrackNumber < 0) CurrentTrackNumber = TrackListSize-1;
+}
+
 uint16_t track_list_get_size(void)
 {
     // return TrackList.GetBufferSize();

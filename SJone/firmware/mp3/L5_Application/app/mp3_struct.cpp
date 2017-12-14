@@ -207,6 +207,11 @@ bool mp3_open_file(file_name_S *file_name)
     }
 }
 
+file_name_S mp3_get_name(void)
+{
+    return current_song.file_name;
+}
+
 void mp3_get_header_info(uint8_t *buffer)
 {
     const uint32_t max_header_size = 480;

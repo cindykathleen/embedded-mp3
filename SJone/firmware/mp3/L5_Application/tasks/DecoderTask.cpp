@@ -1,7 +1,6 @@
 #include "mp3_tasks.hpp"
 #include "ff.h"
 #include "ssp0.h"
-#include "vs1053b.hpp"
 #include "buttons.hpp"
 #include "utilities.hpp"
 
@@ -26,21 +25,6 @@ typedef struct
     const char  *next_track;    // Name of track queued up next to play
 } MP3_status_S;
 
-// GPIO ports to interface with VS1053b
-static const vs1053b_gpio_init_t gpio_init = {
-    .port_reset = GPIO_PORT0,
-    .port_dreq  = GPIO_PORT0,
-    .port_xcs   = GPIO_PORT0,
-    .port_xdcs  = GPIO_PORT0,
-    .pin_reset  = 0,
-    .pin_dreq   = 1,
-    .pin_xcs    = 29,
-    .pin_xdcs   = 30,
-};
-
-// VS1053b object which handles the device drivers
-static VS1053b          MP3Player(gpio_init);
-
 // Buffer for an MP3 segment to send to the device
 static uint8_t          Buffer[MP3_SEGMENT_SIZE] = { 0 };
 
@@ -62,7 +46,7 @@ static command_packet_S CommandPacket = { 0 };
 // Driver level decoder status
 static vs1053b_status_S *status = NULL;
 
-
+VS1053b MP3Player(gpio_init);
 
 // Reverses the buffer from 0 to the specified size
 static void ReverseSegment(uint32_t size_of_segment)
