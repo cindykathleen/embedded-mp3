@@ -28,9 +28,6 @@ typedef struct
     FRESULT file_status;    // Stores the file status of the last file operation
     bool file_is_open;      // Says if f_open has been called and f_close has not been called
     FIL  mp3_file;          // File pointer to an mp3 file off an SD card
-    char artist[32];
-    char title[32];
-    char genre[32];
     uint32_t length;
     uint32_t segment;
     seek_direction_E direction;
@@ -42,12 +39,17 @@ static mp3_song_info_S current_song = {
     .file_status   = FR_OK,
     .file_is_open  = false,
     .mp3_file      = { 0 },
-    .artist        = { 0 },
-    .title         = { 0 },
-    .genre         = { 0 },
     .length        = 0,
     .segment       = 0,
 };
+
+typedef struct
+{
+    file_name_S file_name;
+    char artist[32];
+    char title[32];
+    char genre[32];
+} mp3_header_S;
 
 /**
  *  @explanation:
@@ -66,7 +68,7 @@ static mp3_song_info_S current_song = {
  *  @example:
  *  T P 1 0x00 0x00 0x11 0x00 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x9 0xA 0xB 0xC 0xD 0xE 0xF 0x10
  */
-static void mp3_ip3_parser(uint8_t *buffer, uint32_t size)
+static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
 {
     if (size < 10)
     {
@@ -138,10 +140,10 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size)
             // Don't print it if it's empty or just a junk char
             if (tag_value_index < 2) continue;
 
-            if      (strcmp((const char*)tag, "TT2")  == 0)  memcpy(&current_song.title , tag_value, MAX_NAME_LENGTH);
-            else if (strcmp((const char*)tag, "TP1")  == 0)  memcpy(&current_song.artist, tag_value, MAX_NAME_LENGTH);
-            else if (strcmp((const char*)tag, "TLEN") == 0)  memcpy(&current_song.length, tag_value, MAX_NAME_LENGTH);
-            else if (strcmp((const char*)tag, "TLE")  == 0)  memcpy(&current_song.length, tag_value, MAX_NAME_LENGTH);
+            if      (strcmp((const char*)tag, "TT2")  == 0)  memcpy(&header->title , tag_value, MAX_NAME_LENGTH);
+            else if (strcmp((const char*)tag, "TP1")  == 0)  memcpy(&header->artist, tag_value, MAX_NAME_LENGTH);
+            else if (strcmp((const char*)tag, "TLEN") == 0)  memcpy(&header->length, tag_value, MAX_NAME_LENGTH);
+            else if (strcmp((const char*)tag, "TLE")  == 0)  memcpy(&header->length, tag_value, MAX_NAME_LENGTH);
             else if (strcmp((const char*)tag, "TCO")  == 0) 
             {
                 // Genre is in the format "(xy)"
@@ -152,7 +154,7 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size)
                 {
                     uint8_t genre_code = (tag_value[1] - '0') * 10 + (tag_value[2] - '0');
                     const char* genre = genre_lookup(genre_code);
-                    strncpy(current_song.genre, genre, strlen(genre));
+                    strncpy(header->genre, genre, strlen(genre));
                 }
                 // Genre is in the format "(x)"
                 else if  (tag_value[0] == '(' && 
@@ -161,12 +163,12 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size)
                 {
                     uint8_t genre_code = (tag_value[1] - '0');
                     const char* genre = genre_lookup(genre_code);
-                    strncpy(current_song.genre, genre, strlen(genre));
+                    strncpy(header->genre, genre, strlen(genre));
                 }
                 // Genre is in ascii rather than a lookup code
                 else
                 {
-                    memcpy(&current_song.genre, tag_value, MAX_NAME_LENGTH);
+                    memcpy(&header->genre, tag_value, MAX_NAME_LENGTH);
                 }
             }
         }
@@ -212,12 +214,12 @@ file_name_S mp3_get_name(void)
     return current_song.file_name;
 }
 
-void mp3_get_header_info(uint8_t *buffer)
+void mp3_get_header_info(mp3_header_S *header, uint8_t *buffer)
 {
     const uint32_t max_header_size = 480;
     uint32_t current_segment_size;
     mp3_read_segment(buffer, max_header_size, &current_segment_size);
-    mp3_ip3_parser(buffer, max_header_size);
+    mp3_ip3_parser(buffer, max_header_size, header);
 }
 
 bool mp3_close_file(void)
@@ -235,9 +237,6 @@ bool mp3_close_file(void)
     {
         printf("[mp3_close_file] mp3 file %s closed.\n", current_song.file_name.short_name);
         memset(&(current_song.file_name), 0, sizeof(file_name_S));
-        memset(current_song.artist, 0, sizeof(current_song.artist));
-        memset(current_song.title, 0, sizeof(current_song.title));
-        memset(current_song.genre, 0, sizeof(current_song.genre));
         current_song.file_is_open = false;
         return true;
     }
@@ -318,27 +317,6 @@ bool mp3_rewind_segments(uint32_t segments)
     {   
         return false;
     }
-}
-
-const char* mp3_get_artist(void)
-{
-    if (!current_song.file_is_open)                                       return NULL;
-    else if (current_song.file_is_open && current_song.artist[0] == 0x00) return "Unknown";
-    else                                                                  return current_song.artist;
-}
-
-const char* mp3_get_title(void)
-{
-    if (!current_song.file_is_open)                                       return NULL;
-    else if (current_song.file_is_open && current_song.title[0] == 0x00)  return "Unknown";
-    else                                                                  return current_song.title;
-}
-
-const char* mp3_get_genre(void)
-{
-    if (!current_song.file_is_open)                                       return NULL;
-    else if (current_song.file_is_open && current_song.genre[0] == 0x00)  return "Unknown";
-    else                                                                  return current_song.genre;
 }
 
 void mp3_set_direction(seek_direction_E direction)

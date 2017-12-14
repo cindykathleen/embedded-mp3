@@ -5,6 +5,7 @@
 #include "i2c2.hpp"
 #include "mp3_tasks.hpp"
 #include "gpio_input.hpp"
+#include "buttons.hpp"
 
 #define LCD_ADDRESS             0x4E
 // LCD Commands
@@ -58,21 +59,19 @@
 #define FOUR_BITS               0x02
 
 #define MAX_SONG_LIST           10
-#define SIZE_SONG_LIST          8
-#define MAX_COL_LENGTH          19
+#define MAX_COL_LENGTH          20
 
 #define BLOCK_CHAR              0xFF
 #define ARROW_CHAR              0x7E
 
+SemaphoreHandle_t PlaySem = xSemaphoreCreateBinary();
 
 const uint8_t row_offset[4] = {0x00, 0x40, 0x14, 0x54};
 const char *songStartLine = "------------------|";
 
 
-char songs[MAX_SONG_LIST][MAX_COL_LENGTH];
-
-const char UNKNOWN_ARTIST[MAX_COL_LENGTH] = "Unknown Artist";
-const char UNKNOWN_GENRE[MAX_COL_LENGTH]  = "Unknown Genre";
+static file_name_S **track_list;
+static uint8_t track_list_size = 0;
 
 static uint8_t currentArrowPos = 0;
 static uint32_t currentSongOffset = 0;
@@ -103,11 +102,6 @@ void playSongScreenSetup(uint8_t rowSelected);
 void initSwitches();
 void display_screen();
 
-
-void updateSongTimer() 
-{
-    setCursor(0,2);
-}
 
 void selectRow(uint32_t rowSelected) 
 {
@@ -140,20 +134,21 @@ void moveLineUp()
 void moveLineDown() 
 {
     if (currentArrowPos == 3) {
-        currentSongOffset++;
-        if (currentSongOffset < (SIZE_SONG_LIST-3)) {
+        if ((currentSongOffset + 1) < (track_list_size-3)) {
+            currentSongOffset++;
             clearAllLines();
             printSongs(currentSongOffset);
-        } else {
-            currentSongOffset--;
         }
-    } else {
+    } 
+    else if ((currentSongOffset + 1) < (track_list_size-3)) {
         moveArrowDown();
     }
 
-    if (currentSongIndex < (SIZE_SONG_LIST-1)) {
+    if (currentSongIndex < track_list_size-1) {
         currentSongIndex++;
     }
+
+    printf("%d %d %d\n", track_list_size, currentSongOffset, currentSongIndex);
 }
 
 void printSongs(uint8_t startIndex) 
@@ -161,9 +156,15 @@ void printSongs(uint8_t startIndex)
     uint8_t line = 0;
     for (int i = startIndex; i < (startIndex+4); ++i) {
         setCursor(1, line);
-        uint32_t len = strlen(songs[i]);
-        sendString(songs[i], len);
-        line++;
+        uint32_t len = MIN(strlen(track_list[i]->short_name), 20);
+
+        char *short_name = track_list_get_short_name(i);
+        if (short_name)
+        {
+            // printf("Short: %s\n", short_name);
+            sendString(short_name, len);
+            line++;            
+        }
     }
 }
 
@@ -177,7 +178,7 @@ void clearAllLines()
 void clearLine(uint8_t row) 
 {
     setCursor(1, row);
-    char filler[MAX_COL_LENGTH] = "                 ";
+    char *filler = "                   ";
     uint32_t strLength = strlen(filler);
     sendString(filler, strLength);
     DELAY_MS(50);
@@ -327,6 +328,7 @@ GpioInput sw1(GPIO_PORT0, 0);
 GpioInput sw2(GPIO_PORT0, 0);
 GpioInput sw3(GPIO_PORT0, 0);
 GpioInput sw4(GPIO_PORT0, 0);
+
 void initSwitches() 
 {
     // // Initialize onboard Switch (SW0)
@@ -386,33 +388,42 @@ void display_screen()
 
 void LCDTask(void *p)
 {
+    track_list_init();
+
     i2cBackpackInitMagic();
-    setArrowPosition(0);
-    sendData(ARROW_CHAR);
+    setCursor(0, 0);
 
     // Wait for track list to be initializd
     DELAY_MS(2000);
-    display_screen();
 
+    track_list = track_list_get_track_list();
+    track_list_size = track_list_get_size();
+    // display_screen();
+    printSongs(currentSongOffset);
+    setCursor(0, 0);
+    sendData(ARROW_CHAR);
+    
     while (1)
     {
-        if (sw1.IsHigh())
+        if (Button0::getInstance().IsPressed())
         {
-            track_list_next();
-            display_screen();
+            if (currentScreenIndex == 0) moveLineDown();
         }
-        else if (sw2.IsHigh())
+        else if (Button1::getInstance().IsPressed())
         {
-            track_list_prev();
-            display_screen();
+            if (currentScreenIndex == 0) moveLineUp();
         }
-        else if (sw3.IsHigh())
+        else if (Button2::getInstance().IsPressed())
         {
-            MP3Player.IncrementVolume();
+            xSemaphoreGive(PlaySem, portMAX_DELAY);
+            if (currentScreenIndex == 0) selectRow(currentSongIndex);
         }
-        else if (sw4.IsHigh())
-        {
-            MP3Player.DecrementVolume();
-        }
+        // {
+        //     MP3Player.IncrementVolume();
+        // }
+        // else if (sw4.IsHigh())
+        // {
+        //     MP3Player.DecrementVolume();
+        // }
     }
 }

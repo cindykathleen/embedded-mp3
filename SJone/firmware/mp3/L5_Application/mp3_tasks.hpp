@@ -137,6 +137,8 @@ const char* packet_type_enum_to_string(packet_type_E type);
 // @param opcode : The value of the enum to be converted to string
 const char* packet_opcode_enum_to_string(packet_opcode_E opcode);
 
+void LCDTask(void *p);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         Decoder Task                                          //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -201,6 +203,12 @@ void track_list_shuffle(void);
 
 void track_list_get4(file_name_S file_names[4]);
 
+file_name_S** track_list_get_track_list();
+
+void track_list_convert_to_short_name(file_name_S *file_names);
+
+char* track_list_get_short_name(uint8_t index);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                            mp3_struct                                         //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -237,7 +245,7 @@ bool mp3_is_file_open(void);
 
 file_name_S mp3_get_name(void);
 
-void mp3_get_header_info(uint8_t *buffer);
+void mp3_get_header_info(mp3_header_S *header, uint8_t *buffer);
 
 const char* mp3_get_artist(void);
 

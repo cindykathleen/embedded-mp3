@@ -42,9 +42,7 @@ void RxTask(void *p)
                     break;
                 case PARSER_COMPLETE:
                     // Send to receive queue (wait indefinite)
-                    printf("%02X%02X %02X%02X\n", command_packet.opcode, command_packet.type, command_packet.command.bytes[0],
-                         command_packet.command.bytes[1]);
-                    // xQueueSend(MessageRxQueue, &command_packet, portMAX_DELAY);
+                    xQueueSend(MessageRxQueue, &command_packet, 1 / portTICK_PERIOD_MS);
                     break;
                 case PARSER_ERROR:
                     // Reset it 
