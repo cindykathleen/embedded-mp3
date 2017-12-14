@@ -69,7 +69,6 @@ from django.views.generic import ListView, TemplateView
 import socket, time, os, random, ctypes, sys
 from django.views import View
 import threading
-from celery import shared_task
 
         
 
@@ -79,13 +78,11 @@ class AboutView(TemplateView):
         
 
 class Server():
-    # 192.168.43.194
+    # 192.168.43.194 -- phone IP
     server = '192.168.43.194'
     port = 11000
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     con = s.connect((server,port))
-    print(s)
-    print(con)
 
 
     def send(self,action):
