@@ -22,6 +22,8 @@ void RxTask(void *p)
     parser_status_E status = PARSER_IDLE;
     uint8_t byte = 0;
 
+    UART.Init(115200);
+
     // Main loop
     while (1)
     {
@@ -40,7 +42,9 @@ void RxTask(void *p)
                     break;
                 case PARSER_COMPLETE:
                     // Send to receive queue (wait indefinite)
-                    xQueueSend(MessageRxQueue, &command_packet, portMAX_DELAY);
+                    printf("%02X%02X %02X%02X\n", command_packet.opcode, command_packet.type, command_packet.command.bytes[0],
+                         command_packet.command.bytes[1]);
+                    // xQueueSend(MessageRxQueue, &command_packet, portMAX_DELAY);
                     break;
                 case PARSER_ERROR:
                     // Reset it 
@@ -48,13 +52,13 @@ void RxTask(void *p)
                     break;
             }
 
-            xEventGroupSetBits(watchdog_event_group, WATCHDOG_RX_BIT);
+            // xEventGroupSetBits(watchdog_event_group, WATCHDOG_RX_BIT);
         }
-        // If no bytes on the RX line let another task take over
-        else
-        {
-            xEventGroupSetBits(watchdog_event_group, WATCHDOG_RX_BIT);
-            DELAY_MS(1);            
-        }
+        // // If no bytes on the RX line let another task take over
+        // else
+        // {
+        //     // xEventGroupSetBits(watchdog_event_group, WATCHDOG_RX_BIT);
+        //     DELAY_MS(1);            
+        // }
     }
 }

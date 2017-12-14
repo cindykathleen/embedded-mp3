@@ -7,8 +7,8 @@
 #include "queue.h"
 #include "L0_LowLevel/source/lpc_peripherals.h"
 
-static QueueHandle_t RxQueue = xQueueCreate(130, sizeof(char));
-static QueueHandle_t TxQueue = xQueueCreate(130, sizeof(char));
+static QueueHandle_t RxQueue = xQueueCreate(16  , sizeof(char));
+static QueueHandle_t TxQueue = xQueueCreate(16  , sizeof(char));
 
 // Interrupt Handlers
 extern "C" 
@@ -100,6 +100,8 @@ extern "C"
             // Unhandled
             default: break;
         }
+
+        printf("\n");
 
         portYIELD_FROM_ISR( higher_priority_task_woken );
     }

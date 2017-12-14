@@ -74,7 +74,7 @@ parser_status_E command_packet_parser(uint8_t byte, command_packet_S *packet)
     switch (state)
     {
         case LENGTH:
-            packet->length = byte;
+            packet->type = byte;
             state = OPCODE;
             return PARSER_IN_PROGRESS;
         case OPCODE:

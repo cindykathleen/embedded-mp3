@@ -73,7 +73,7 @@ typedef struct
 // Command Packet structure
 typedef struct
 {
-    uint8_t length; // Size of payload in bytes
+    uint8_t type; // Size of payload in bytes
     uint8_t opcode; // Type of packet
 
     union
