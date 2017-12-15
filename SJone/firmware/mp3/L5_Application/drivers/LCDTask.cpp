@@ -71,6 +71,7 @@ const char *songStartLine = "------------------|";
 
 
 static file_name_S **track_list;
+static mp3_header_S* headers;
 static uint8_t track_list_size = 0;
 
 static uint8_t currentArrowPos = 0;
@@ -290,32 +291,21 @@ void i2cBackpackInitMagic()
 
 void playSongScreenSetup(uint8_t rowSelected) 
 {
-    // Song Name
-    file_name_S track = mp3_get_name();
-    uint32_t sLen = strlen(track.short_name);
-    sendString(track.short_name, sLen);
+    char *name = headers[currentSongIndex].file_name.short_name;
+    uint8_t length = strlen(name);
+    sendString(name, length);
 
     // Artist Name
     setCursor(0,1);
-    char *artist = (char *)mp3_get_artist();
-    if (artist == NULL)
-    {
-        artist = (char*)malloc(sizeof(char) * 8);
-        strncpy(artist, "Unknown\0", 8);
-    }
-    uint32_t aLen = strlen(artist);
-    sendString(artist, aLen);
+    char *artist = headers[currentSongIndex].artist;
+    length = strlen(artist);
+    sendString(artist, length);
 
     // Genre
     setCursor(0,2);
-    char *genre = (char *)mp3_get_genre();
-    if (genre == NULL)
-    {
-        genre = (char *)malloc(sizeof(char) * 8);
-        strncpy(genre, "Unknown\0", 8);
-    }
-    uint32_t gLen = strlen(genre);
-    sendString(genre, gLen);
+    char *genre = headers[currentSongIndex].genre;
+    length = strlen(genre);
+    sendString(genre, length);
 
     // Set Song Timeline - bottom row
     setCursor(0,3);
@@ -398,7 +388,8 @@ void LCDTask(void *p)
 
     track_list = track_list_get_track_list();
     track_list_size = track_list_get_size();
-    // display_screen();
+    headers = track_list_get_headers();
+
     printSongs(currentSongOffset);
     setCursor(0, 0);
     sendData(ARROW_CHAR);
@@ -415,9 +406,12 @@ void LCDTask(void *p)
         }
         else if (Button2::getInstance().IsPressed())
         {
-            xSemaphoreGive(PlaySem, portMAX_DELAY);
             if (currentScreenIndex == 0) selectRow(currentSongIndex);
+            track_list_set_current_track(currentSongIndex);
+            // Unblock DecoderTask
+            // xSemaphoreGive(PlaySem, portMAX_DELAY);
         }
+
         // {
         //     MP3Player.IncrementVolume();
         // }

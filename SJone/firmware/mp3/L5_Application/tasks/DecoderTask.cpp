@@ -26,10 +26,10 @@ typedef struct
 } MP3_status_S;
 
 // Buffer for an MP3 segment to send to the device
-static uint8_t          Buffer[MP3_SEGMENT_SIZE] = { 0 };
+static uint8_t Buffer[MP3_SEGMENT_SIZE] = { 0 };
 
 // Application level decoder status
-static MP3_status_S     Status = {
+static MP3_status_S Status = {
     .cancel_requested = false,
     .next_state       = IDLE,
     .sample_rate      = 0,
@@ -130,7 +130,9 @@ static void HandleStateLogic(void)
             {
                 printf("[MP3Task] Last segment, mp3 file closing...\n");
                 mp3_close_file();
-                Status.next_state = IDLE;
+                track_list_next();
+                // Status.curr_track = track_list_get_current_track();
+                printf("Current Track: %s \n", Status.curr_track.short_name);
             }
             break;
 
@@ -149,9 +151,9 @@ static void HandleStateLogic(void)
                 // printf("[MP3Task] No need to cancel, not currently playing.\n");
                 Status.next_state = IDLE;
             }
-            // Don't start until LCD has selected a song
+
+            // Block and go back to LCD screen
             xSemaphoreTake(PlaySem, portMAX_DELAY);
-            
             break;
     }
 }
@@ -163,19 +165,28 @@ static void CheckButtons(void)
     if (Button0::getInstance().IsPressed())
     {
         if      (Status.next_state == IDLE || Status.next_state == STOP) Status.next_state = PLAY;
-        else if (Status.next_state == PLAY) Status.next_state = STOP;
+        else if (Status.next_state == PLAY)                              Status.next_state = STOP;
     }
     // Change track
     else if (Button1::getInstance().IsPressed())
     {
+        if (MP3Player.IsPlaying())
+        {
+            // Stop playback
+            MP3Player.CancelDecoding();
+
+            if (mp3_is_file_open())
+            {
+                printf("Closing file...\n");
+                mp3_close_file();
+            }
+            // printf("[MP3Task] No need to cancel, not currently playing.\n");
+            Status.next_state = PLAY;
+        }
+
         track_list_next();
-        Status.curr_track = track_list_get_current_track();
+        // Status.curr_track = track_list_get_current_track();
         printf("Current Track: %s \n", Status.curr_track.short_name);
-        // mp3_get_header_info(Buffer);
-        memset(Buffer, 0, sizeof(Buffer));
-        // printf("Artist : %s\n", mp3_get_artist());
-        // printf("Title  : %s\n", mp3_get_title());
-        // printf("Genre  : %s\n", mp3_get_genre());
     }
     // Toggle fast forward mode
     else if (Button2::getInstance().IsPressed())
@@ -187,7 +198,9 @@ static void CheckButtons(void)
     else if (Button3::getInstance().IsPressed())
     {
         // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
-        MP3Player.DecrementVolume();
+        // MP3Player.DecrementVolume();
+
+        Status.next_state = STOP;
     }
 }
 
@@ -347,10 +360,14 @@ void DecoderTask(void *p)
     // Initialize the decoder
     MP3Player.SystemInit();
 
-    // Status.curr_track = track_list_get_current_track();
-
     // Don't start until LCD has selected a song
-    xSemaphoreTake(PlaySem, portMAX_DELAY);
+    // xSemaphoreTake(PlaySem, portMAX_DELAY);
+
+    const char *c = "Congratulations.mp3";
+    file_name_S test;
+    strncpy(test.full_name, "Congratulations.mp3", strlen(c));
+    test.full_name[strlen(c)] = '\0';
+    Status.curr_track = test;
 
     // Main loop
     while (1)

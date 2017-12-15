@@ -647,7 +647,7 @@ void VS1053b::UpdateHeaderInformation()
     }
 }
 
-mp3_header_S* VS1053b::GetHeaderInformation()
+vs1053b_mp3_header_S* VS1053b::GetHeaderInformation()
 {
     UpdateHeaderInformation();
 

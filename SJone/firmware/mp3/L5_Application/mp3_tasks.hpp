@@ -3,86 +3,6 @@
 #include "common.hpp"
 #include "vs1053b.hpp"
 
-// Struct containing original name, and name without extension
-// The original name is necessary to open the file from the FatFS
-// The short name is necessary for displaying on the screen
-typedef struct
-{
-    char full_name[MAX_NAME_LENGTH];    // Original name
-    char short_name[MAX_NAME_LENGTH];   // Name without extension
-} file_name_S;
-
-typedef enum
-{
-    DIR_FORWARD,
-    DIR_BACKWARD
-} seek_direction_E;
-
-// Denotes the type of the packet
-typedef enum
-{
-    PACKET_TYPE_INFO          = 0,  // System starting/finishing/initializing something, x bytes were sent
-    PACKET_TYPE_ERROR         = 1,  // Something failed
-    PACKET_TYPE_STATUS        = 2,  // Something successful, something complete
-    PACKET_TYPE_COMMAND_READ  = 3,  // Read commands to the decoder
-    PACKET_TYPE_COMMAND_WRITE = 4,  // Write commands to the decoder
-} packet_type_E;
-
-// Denotes the opcode for command packets
-typedef enum
-{
-    PACKET_OPCODE_NONE                = 0,
-    PACKET_OPCODE_SET_BASS            = 1,
-    PACKET_OPCODE_SET_TREBLE          = 2,
-    PACKET_OPCODE_SET_SAMPLE_RATE     = 3,
-    PACKET_OPCODE_SET_PLAY_CURRENT    = 4,
-    PACKET_OPCODE_SET_PLAY_NEXT       = 5,
-    PACKET_OPCODE_SET_PLAY_PREV       = 6,
-    PACKET_OPCODE_SET_STOP            = 7,
-    PACKET_OPCODE_SET_FAST_FORWARD    = 8,
-    PACKET_OPCODE_SET_REVERSE         = 9,
-    PACKET_OPCODE_SET_SHUFFLE         = 10,
-    PACKET_OPCODE_GET_STATUS          = 11,
-    PACKET_OPCODE_GET_SAMPLE_RATE     = 12,
-    PACKET_OPCODE_GET_DECODE_TIME     = 13,
-    PACKET_OPCODE_GET_HEADER_INFO     = 14,
-    PACKET_OPCODE_GET_BIT_RATE        = 15,
-    PACKET_OPCODE_SET_RESET           = 16,
-    PACKET_OPCODE_LAST_INVALID        = 17,
-} packet_opcode_E;
-
-// Denotes the current state of the parser
-typedef enum
-{
-    PARSER_IDLE,
-    PARSER_IN_PROGRESS,
-    PARSER_COMPLETE,
-    PARSER_ERROR
-} parser_status_E;
-
-// Diagnostic Packet structure
-typedef struct
-{
-    uint8_t length; // Size of payload in bytes
-    uint8_t type;   // Type of packet
-
-    uint8_t payload[MAX_PACKET_SIZE];
-
-} __attribute__((packed)) diagnostic_packet_S;
-
-// Command Packet structure
-typedef struct
-{
-    uint8_t type; // Size of payload in bytes
-    uint8_t opcode; // Type of packet
-
-    union
-    {
-        uint8_t  bytes[2];
-        uint16_t half_word;
-    } command;
-
-} __attribute__((packed)) command_packet_S;
 
 // GPIO ports to interface with VS1053b
 static const vs1053b_gpio_init_t gpio_init = {
@@ -95,6 +15,7 @@ static const vs1053b_gpio_init_t gpio_init = {
     .pin_xcs    = 29,
     .pin_xdcs   = 30,
 };
+
 
 // VS1053b object which handles the device drivers
 extern VS1053b MP3Player;
@@ -192,11 +113,6 @@ void track_list_next(void);
 
 void track_list_prev(void);
 
-// @description : Retrieves the current track name from the ciruclar buffer and separates
-//                the name from the file extension
-// @returns     : A struct containing the original name, and the name without extension
-file_name_S track_list_get_current_track(void);
-
 uint16_t track_list_get_size(void);
 
 void track_list_shuffle(void);
@@ -208,6 +124,12 @@ file_name_S** track_list_get_track_list();
 void track_list_convert_to_short_name(file_name_S *file_names);
 
 char* track_list_get_short_name(uint8_t index);
+
+mp3_header_S* track_list_get_headers();
+
+void track_list_set_current_track(uint8_t index);
+
+uint8_t track_list_get_current_track();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                            mp3_struct                                         //

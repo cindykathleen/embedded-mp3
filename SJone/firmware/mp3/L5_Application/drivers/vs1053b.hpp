@@ -97,7 +97,7 @@ typedef struct
         uint16_t value;
     } reg0;
 
-} __attribute__((packed)) mp3_header_S;
+} __attribute__((packed)) vs1053b_mp3_header_S;
 
 typedef struct
 {
@@ -244,7 +244,7 @@ public:
 
     // @description     : Parses the header information of the current mp3 file
     // @returns         : Struct of the header information
-    mp3_header_S* GetHeaderInformation();
+    vs1053b_mp3_header_S* GetHeaderInformation();
 
     // @description     : Reads the current bit rate setting
     // @returns         : The current bit rate
@@ -266,7 +266,7 @@ private:
     GpioOutput XDCS;
 
     // Stores a struct of the current mp3's header information
-    mp3_header_S Header;
+    vs1053b_mp3_header_S Header;
 
     // Stores a struct of status information to be transmitted
     vs1053b_status_S Status;

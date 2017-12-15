@@ -13,6 +13,8 @@ static file_name_S **TrackList;
 static uint8_t TrackListSize = 0;
 static uint8_t CurrentTrackNumber = 0;
 
+// Array of song header information in the same order as tracklist
+mp3_header_S *Headers;
 
 void track_list_init(void)
 {
@@ -34,7 +36,7 @@ void track_list_init(void)
     const char *directory_path = "1:";
     f_opendir(&directory, directory_path);
 
-    printf("--------------------------------------\n");
+    printf("\n--------------------------------------\n");
     printf("Reading SD directory:\n");
 
     while (1)
@@ -86,12 +88,18 @@ void track_list_init(void)
     }
 
     uint8_t buffer[480] = { 0 };
+    Headers = new mp3_header_S[TrackListSize];
 
     // Grab header information
     for (int i=0; i<TrackListSize; i++)
     {
+        memset(&Headers[i], 0, sizeof(Headers[i]));
+        memcpy(&Headers[i].file_name, TrackList[i], sizeof(file_name_S));
         mp3_open_file(TrackList[i]);
-        mp3_get_header_info(buffer);
+        mp3_get_header_info(&Headers[i], buffer);
+        printf("%s | %s | %s\n", Headers[i].artist, Headers[i].title, Headers[i].genre);
+        DELAY_MS(1000);
+        mp3_close_file();
     }
     printf("--------------------------------------\n");
 }
@@ -107,8 +115,8 @@ void track_list_convert_to_short_name(file_name_S *file_names)
     if (index < 32) file_names->short_name[index-1] = '\0';
     else            file_names->short_name[31] = '\0';
 
-    printf("FULL: %s\n",  file_names->full_name);
-    printf("SHORT: %s\n", file_names->short_name);
+    // printf("FULL: %s\n",  file_names->full_name);
+    // printf("SHORT: %s\n", file_names->short_name);
 }
 
 char* track_list_get_short_name(uint8_t index)
@@ -139,38 +147,53 @@ uint16_t track_list_get_size(void)
     return TrackListSize;
 }
 
-void track_list_shuffle(void)
-{
-    // TrackList.ShuffleList();
-}
+// void track_list_shuffle(void)
+// {
+//     // TrackList.ShuffleList();
+// }
 
-void track_list_get4(file_name_S file_names[4])
-{
-    uint8_t last_index = CurrentTrackNumber;
+// void track_list_get4(file_name_S file_names[4])
+// {
+//     uint8_t last_index = CurrentTrackNumber;
 
-    file_names[0] = track_list_get_current_track();
-    track_list_next();
+//     file_names[0] = track_list_get_current_track();
+//     track_list_next();
 
-    if (TrackListSize > 1)
-    {
-        file_names[1] = track_list_get_current_track();
-        track_list_next();
-    }
-    if (TrackListSize > 2)
-    {
-        file_names[2] = track_list_get_current_track();
-        track_list_next();
-    }
-    if (TrackListSize > 3)
-    {
-        file_names[3] = track_list_get_current_track();
-        track_list_next();
-    }
+//     if (TrackListSize > 1)
+//     {
+//         file_names[1] = track_list_get_current_track();
+//         track_list_next();
+//     }
+//     if (TrackListSize > 2)
+//     {
+//         file_names[2] = track_list_get_current_track();
+//         track_list_next();
+//     }
+//     if (TrackListSize > 3)
+//     {
+//         file_names[3] = track_list_get_current_track();
+//         track_list_next();
+//     }
 
-    CurrentTrackNumber = last_index;
-}
+//     CurrentTrackNumber = last_index;
+// }
 
 file_name_S** track_list_get_track_list()
 {
     return TrackList;
+}
+
+mp3_header_S* track_list_get_headers()
+{
+    return Headers;
+}
+
+void track_list_set_current_track(uint8_t index)
+{
+    CurrentTrackNumber = MIN(CurrentTrackNumber, TrackListSize);
+}
+
+uint8_t track_list_get_current_track()
+{
+    return CurrentTrackNumber;
 }

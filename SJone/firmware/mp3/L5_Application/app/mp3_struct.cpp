@@ -43,14 +43,6 @@ static mp3_song_info_S current_song = {
     .segment       = 0,
 };
 
-typedef struct
-{
-    file_name_S file_name;
-    char artist[32];
-    char title[32];
-    char genre[32];
-} mp3_header_S;
-
 /**
  *  @explanation:
  *  ID3 is a universal de facto standard of MP3 files.  The encoding stores a large header section in the beginning of the file.
@@ -76,8 +68,14 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
     }
     else
     {
+        // Start off with unknown
+        const char *unknown = "Unknown";
+        strncpy(header->artist, unknown, strlen(unknown));
+        strncpy(header->genre,  unknown, strlen(unknown));
+        strncpy(header->title,  unknown, strlen(unknown));
+
         const uint8_t char_TERMINATE = 0x00;
-        mp3_id3_header_S header = { 0 };
+        mp3_id3_header_S id3_header = { 0 };
         // Tags are usually 3-4 bytes, but leaving enough space to always be null terminated
         uint8_t  tag[6]          = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
         uint8_t  tag_value[128]  = { 0 };
@@ -86,7 +84,7 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
         uint8_t  tag_value_index = 0;
 
         // Save general file meta information (the main file header)
-        memcpy(&header, buffer, sizeof(header));
+        memcpy(&id3_header, buffer, sizeof(id3_header));
         buffer       += 10;
         buffer_index += 10;
 
@@ -142,8 +140,6 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
 
             if      (strcmp((const char*)tag, "TT2")  == 0)  memcpy(&header->title , tag_value, MAX_NAME_LENGTH);
             else if (strcmp((const char*)tag, "TP1")  == 0)  memcpy(&header->artist, tag_value, MAX_NAME_LENGTH);
-            else if (strcmp((const char*)tag, "TLEN") == 0)  memcpy(&header->length, tag_value, MAX_NAME_LENGTH);
-            else if (strcmp((const char*)tag, "TLE")  == 0)  memcpy(&header->length, tag_value, MAX_NAME_LENGTH);
             else if (strcmp((const char*)tag, "TCO")  == 0) 
             {
                 // Genre is in the format "(xy)"
@@ -154,7 +150,8 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
                 {
                     uint8_t genre_code = (tag_value[1] - '0') * 10 + (tag_value[2] - '0');
                     const char* genre = genre_lookup(genre_code);
-                    strncpy(header->genre, genre, strlen(genre));
+                    memcpy(header->genre, genre, strlen(genre));
+                    header->genre[strlen(genre)] = '\0';
                 }
                 // Genre is in the format "(x)"
                 else if  (tag_value[0] == '(' && 
@@ -163,13 +160,15 @@ static void mp3_ip3_parser(uint8_t *buffer, uint32_t size, mp3_header_S *header)
                 {
                     uint8_t genre_code = (tag_value[1] - '0');
                     const char* genre = genre_lookup(genre_code);
-                    strncpy(header->genre, genre, strlen(genre));
+                    memcpy(header->genre, genre, strlen(genre));
+                    header->genre[strlen(genre)] = '\0';
                 }
                 // Genre is in ascii rather than a lookup code
                 else
                 {
                     memcpy(&header->genre, tag_value, MAX_NAME_LENGTH);
                 }
+                header->genre[31] = '\0';
             }
         }
     }
@@ -216,7 +215,7 @@ file_name_S mp3_get_name(void)
 
 void mp3_get_header_info(mp3_header_S *header, uint8_t *buffer)
 {
-    const uint32_t max_header_size = 480;
+    const uint32_t max_header_size = 470;
     uint32_t current_segment_size;
     mp3_read_segment(buffer, max_header_size, &current_segment_size);
     mp3_ip3_parser(buffer, max_header_size, header);
