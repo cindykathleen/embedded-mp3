@@ -50,6 +50,8 @@ packet opcodes:
     PACKET_OPCODE_GET_BIT_RATE        = 15,
     PACKET_OPCODE_SET_RESET           = 16,
     PACKET_OPCODE_LAST_INVALID        = 17,
+    PACKET_OPCODE_SET_VOLUME_UP       = 18,
+    PACKET_OPCODE_SET_VOLUME_DOWN     = 19,
 -------------------------------------------
 
 
@@ -88,32 +90,32 @@ class Server():
     def send(self,action):
 
         if action is 'play':
-            self.send_data(0x0404)
+            self.send_data(0x04040000)
 
         elif action is 'pause':
-            self.send_data(0x0704)
+            self.send_data(0x07040000)
 
         elif action is 'previous':
-            self.send_data(0x0604)
+            self.send_data(0x06040000)
 
         elif action is 'next':
-            self.send_data(0x0504)
+            self.send_data(0x05040000)
 
         elif action is 'fastforward':
-            self.send_data(0x0804)
+            self.send_data(0x08040000)
 
         elif action is 'shuffle':
-            self.send_data(0x0B04)
+            self.send_data(0x0B040000)
 
         elif action is 'volumeUp':
-            self.send_data(0x0B04)
+            self.send_data(0x12040000)
 
         elif action is 'volumeDown':
-            self.send_data(0x0B04)
+            self.send_data(0x13040000)
         return
 
     def send_data(self,hex_value):
-        msg_value = (hex_value).to_bytes(2, byteorder='big')
+        msg_value = (hex_value).to_bytes(4, byteorder='big')
         self.s.sendto(msg_value, (self.server,self.port))
 
     def close(self):
