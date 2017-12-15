@@ -129,7 +129,7 @@ mp3_header_S* track_list_get_headers();
 
 void track_list_set_current_track(uint8_t index);
 
-uint8_t track_list_get_current_track();
+file_name_S* track_list_get_current_track();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                            mp3_struct                                         //

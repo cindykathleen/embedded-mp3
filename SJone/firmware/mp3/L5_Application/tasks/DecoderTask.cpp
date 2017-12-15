@@ -3,7 +3,9 @@
 #include "ssp0.h"
 #include "buttons.hpp"
 #include "utilities.hpp"
+#include "gpio_input.hpp"
 
+SemaphoreHandle_t PlaySem;
 
 typedef enum
 {
@@ -46,7 +48,16 @@ static command_packet_S CommandPacket = { 0 };
 // Driver level decoder status
 static vs1053b_status_S *status = NULL;
 
+// Extern
 VS1053b MP3Player(gpio_init);
+
+// GPIO Pins
+GpioInput sw1(GPIO_PORT1, 22);
+GpioInput sw2(GPIO_PORT1, 23);
+GpioInput sw3(GPIO_PORT1, 28);
+GpioInput sw4(GPIO_PORT1, 29);
+GpioInput sw5(GPIO_PORT1, 19);
+GpioInput sw6(GPIO_PORT1, 20);
 
 // Reverses the buffer from 0 to the specified size
 static void ReverseSegment(uint32_t size_of_segment)
@@ -85,7 +96,7 @@ static void HandleStateLogic(void)
                 // Reset values to default
                 last_segment = false;
                 // Open mp3 file
-                if (!mp3_open_file(&Status.curr_track))
+                if (!mp3_open_file(track_list_get_current_track()))
                 {
                     Status.next_state = IDLE;
                     break;
@@ -152,8 +163,8 @@ static void HandleStateLogic(void)
                 Status.next_state = IDLE;
             }
 
-            // Block and go back to LCD screen
-            xSemaphoreTake(PlaySem, portMAX_DELAY);
+            // // Block and go back to LCD screen
+            // xSemaphoreTake(PlaySem, portMAX_DELAY);
             break;
     }
 }
@@ -161,15 +172,55 @@ static void HandleStateLogic(void)
 // Check if any buttons are pressed, only one button can be registered at a time
 static void CheckButtons(void)
 {
-    // If playing, stop, else play
-    if (Button0::getInstance().IsPressed())
-    {
+    // // If playing, stop, else play
+    // if (Button0::getInstance().IsPressed())
+    // {
+    //     if      (Status.next_state == IDLE || Status.next_state == STOP) Status.next_state = PLAY;
+    //     else if (Status.next_state == PLAY)                              Status.next_state = STOP;
+    // }
+    // // Change track
+    // else if (Button1::getInstance().IsPressed())
+    // {
+    //     if (MP3Player.IsPlaying())
+    //     {
+    //         // Stop playback
+    //         MP3Player.CancelDecoding();
+
+    //         if (mp3_is_file_open())
+    //         {
+    //             printf("Closing file...\n");
+    //             mp3_close_file();
+    //         }
+    //         // printf("[MP3Task] No need to cancel, not currently playing.\n");
+    //         Status.next_state = PLAY;
+    //     }
+
+    //     track_list_next();
+    //     // Status.curr_track = track_list_get_current_track();
+    //     printf("Current Track: %s \n", Status.curr_track.short_name);
+    // }
+    // // Toggle fast forward mode
+    // else if (Button2::getInstance().IsPressed())
+    // {
+    //     // MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+    //     MP3Player.IncrementVolume();
+    // }
+    // // Toggle rewind mode
+    // else if (Button3::getInstance().IsPressed())
+    // {
+    //     // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+    //     // MP3Player.DecrementVolume();
+
+    //     Status.next_state = STOP;
+    // }
+
+    if (LPC_GPIO1->FIOPIN & (1 << 22))
+    {   printf("asdf\n");
         if      (Status.next_state == IDLE || Status.next_state == STOP) Status.next_state = PLAY;
         else if (Status.next_state == PLAY)                              Status.next_state = STOP;
     }
-    // Change track
-    else if (Button1::getInstance().IsPressed())
-    {
+    else if (LPC_GPIO1->FIOPIN & (1 << 23))
+    {   printf("asdf\n");
         if (MP3Player.IsPlaying())
         {
             // Stop playback
@@ -188,19 +239,21 @@ static void CheckButtons(void)
         // Status.curr_track = track_list_get_current_track();
         printf("Current Track: %s \n", Status.curr_track.short_name);
     }
-    // Toggle fast forward mode
-    else if (Button2::getInstance().IsPressed())
-    {
-        // MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+    else if (LPC_GPIO1->FIOPIN & (1 << 28))
+    {   printf("asdf\n");
+        mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+    }
+    else if (LPC_GPIO1->FIOPIN & (1 << 29))
+    {   printf("asdf\n");
+        MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+    }
+    else if (LPC_GPIO1->FIOPIN & (1 << 19))
+    {   printf("asdf\n");
         MP3Player.IncrementVolume();
     }
-    // Toggle rewind mode
-    else if (Button3::getInstance().IsPressed())
-    {
-        // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
-        // MP3Player.DecrementVolume();
-
-        Status.next_state = STOP;
+    else if (LPC_GPIO1->FIOPIN & (1 << 20))
+    {   printf("asdf\n");
+        MP3Player.DecrementVolume();
     }
 }
 
@@ -352,8 +405,20 @@ static void ServiceCommand(void)
     }
 }
 
+void InitButtons()
+{
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 29);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 28);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 23);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 22);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 20);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 19);
+}
+
 void DecoderTask(void *p)
 {
+    InitButtons();
+
     // Initialize the SPI
     ssp0_init(0);
 
@@ -361,18 +426,13 @@ void DecoderTask(void *p)
     MP3Player.SystemInit();
 
     // Don't start until LCD has selected a song
-    // xSemaphoreTake(PlaySem, portMAX_DELAY);
-
-    const char *c = "Congratulations.mp3";
-    file_name_S test;
-    strncpy(test.full_name, "Congratulations.mp3", strlen(c));
-    test.full_name[strlen(c)] = '\0';
-    Status.curr_track = test;
+    PlaySem = xSemaphoreCreateBinary();
+    xSemaphoreTake(PlaySem, portMAX_DELAY);
+    Status.next_state = PLAY;
 
     // Main loop
     while (1)
     {
-    
         CheckButtons();
         HandleStateLogic();
         // CheckRxQueue();

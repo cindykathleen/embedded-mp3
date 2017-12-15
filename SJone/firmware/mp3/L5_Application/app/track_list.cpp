@@ -19,7 +19,7 @@ mp3_header_S *Headers;
 void track_list_init(void)
 {
     TrackList = new file_name_S*[MAX_TRACK_LIST_SIZE];
-    for (int i=0; i<32; i++)
+    for (int i=0; i<MAX_TRACK_LIST_SIZE; i++)
     {
         TrackList[i] = new file_name_S;
         memset(TrackList[i]->full_name,  0, 32);
@@ -84,7 +84,7 @@ void track_list_init(void)
                     track_list_convert_to_short_name(TrackList[TrackListSize-1]);
                 }
             }
-        }        
+        }
     }
 
     uint8_t buffer[480] = { 0 };
@@ -97,8 +97,7 @@ void track_list_init(void)
         memcpy(&Headers[i].file_name, TrackList[i], sizeof(file_name_S));
         mp3_open_file(TrackList[i]);
         mp3_get_header_info(&Headers[i], buffer);
-        printf("%s | %s | %s\n", Headers[i].artist, Headers[i].title, Headers[i].genre);
-        DELAY_MS(1000);
+        // printf("%s | %s | %s\n", Headers[i].artist, Headers[i].title, Headers[i].genre);
         mp3_close_file();
     }
     printf("--------------------------------------\n");
@@ -193,7 +192,7 @@ void track_list_set_current_track(uint8_t index)
     CurrentTrackNumber = MIN(CurrentTrackNumber, TrackListSize);
 }
 
-uint8_t track_list_get_current_track()
+file_name_S* track_list_get_current_track()
 {
-    return CurrentTrackNumber;
+    return TrackList[CurrentTrackNumber];
 }

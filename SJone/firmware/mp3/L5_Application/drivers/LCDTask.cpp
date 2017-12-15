@@ -4,8 +4,8 @@
 #include <string.h>
 #include "i2c2.hpp"
 #include "mp3_tasks.hpp"
-#include "gpio_input.hpp"
 #include "buttons.hpp"
+#include "common.hpp"
 
 #define LCD_ADDRESS             0x4E
 // LCD Commands
@@ -64,8 +64,6 @@
 #define BLOCK_CHAR              0xFF
 #define ARROW_CHAR              0x7E
 
-SemaphoreHandle_t PlaySem = xSemaphoreCreateBinary();
-
 const uint8_t row_offset[4] = {0x00, 0x40, 0x14, 0x54};
 const char *songStartLine = "------------------|";
 
@@ -98,7 +96,7 @@ void setHome();
 void sendData(char c, uint8_t mode = DATA);
 void sendString(char *str, uint32_t size);
 void write(uint8_t * wdata, uint32_t wlength);
-void i2cBackpackInitMagic();
+void I2C_THIS_IS_TOTALLY_NOT_HARDCODED_MAGIC();
 void playSongScreenSetup(uint8_t rowSelected);
 void initSwitches();
 void display_screen();
@@ -162,7 +160,7 @@ void printSongs(uint8_t startIndex)
         char *short_name = track_list_get_short_name(i);
         if (short_name)
         {
-            // printf("Short: %s\n", short_name);
+            printf("Short: %s\n", short_name);
             sendString(short_name, len);
             line++;            
         }
@@ -261,7 +259,7 @@ void write(uint8_t * wdata, uint32_t wlength)
     I2C2::getInstance().writeRegisters(LCD_ADDRESS, wdata, wlength); 
 }
 
-void i2cBackpackInitMagic() 
+void I2C_THIS_IS_TOTALLY_NOT_HARDCODED_MAGIC() 
 {
     uint8_t rd = 0x60; // random value - clear backback
     I2C2::getInstance().readRegisters(LCD_ADDRESS, &rd, 1); 
@@ -313,11 +311,6 @@ void playSongScreenSetup(uint8_t rowSelected)
     uint32_t lineLen = strlen(songStartLine);
     sendString((char *)songStartLine,lineLen);
 }
-
-GpioInput sw1(GPIO_PORT0, 0);
-GpioInput sw2(GPIO_PORT0, 0);
-GpioInput sw3(GPIO_PORT0, 0);
-GpioInput sw4(GPIO_PORT0, 0);
 
 void initSwitches() 
 {
@@ -378,38 +371,42 @@ void display_screen()
 
 void LCDTask(void *p)
 {
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 29);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 28);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 23);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 22);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 20);
+    LPC_GPIO1->FIODIR   &= ~(0x1 << 19);
+
     track_list_init();
-
-    i2cBackpackInitMagic();
-    setCursor(0, 0);
-
-    // Wait for track list to be initializd
-    DELAY_MS(2000);
-
     track_list = track_list_get_track_list();
     track_list_size = track_list_get_size();
     headers = track_list_get_headers();
 
-    printSongs(currentSongOffset);
+    I2C_THIS_IS_TOTALLY_NOT_HARDCODED_MAGIC();
+    DELAY_MS(100);
     setCursor(0, 0);
     sendData(ARROW_CHAR);
+
+    printSongs(currentSongOffset);
     
     while (1)
     {
-        if (Button0::getInstance().IsPressed())
+        if (LPC_GPIO1->FIOPIN & (1 << 22))
         {
             if (currentScreenIndex == 0) moveLineDown();
         }
-        else if (Button1::getInstance().IsPressed())
+        else if (LPC_GPIO1->FIOPIN & (1 << 23))
         {
             if (currentScreenIndex == 0) moveLineUp();
         }
-        else if (Button2::getInstance().IsPressed())
+        else if (LPC_GPIO1->FIOPIN & (1 << 28))
         {
             if (currentScreenIndex == 0) selectRow(currentSongIndex);
             track_list_set_current_track(currentSongIndex);
             // Unblock DecoderTask
-            // xSemaphoreGive(PlaySem, portMAX_DELAY);
+            printf("Unblocking decodertask...\n");
+            xSemaphoreGive(PlaySem);
         }
 
         // {

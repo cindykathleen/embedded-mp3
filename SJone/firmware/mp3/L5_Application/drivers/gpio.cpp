@@ -1,4 +1,6 @@
 #include "gpio.hpp"
+#include "FreeRTOS.h"
+#include "task.h"
 
 Gpio::Gpio(gpio_port_t port, gpio_pin_t pin, gpio_mode_t mode)
 {
@@ -95,7 +97,16 @@ void Gpio::SelectGpioFunction(gpio_port_t port)
 
 bool Gpio::IsHigh()
 {
-	return (GpioPtr->FIOPIN & (1 << Pin));
+	if (GpioPtr->FIOPIN & (1 << Pin))
+	{
+		vTaskDelay(50 / portTICK_PERIOD_MS);
+		while(GpioPtr->FIOPIN & (1 << Pin));
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 bool Gpio::IsLow()
