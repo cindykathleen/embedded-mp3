@@ -215,12 +215,16 @@ static void CheckButtons(void)
     // }
 
     if (LPC_GPIO1->FIOPIN & (1 << 22))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 22));
         if      (Status.next_state == IDLE || Status.next_state == STOP) Status.next_state = PLAY;
         else if (Status.next_state == PLAY)                              Status.next_state = STOP;
     }
     else if (LPC_GPIO1->FIOPIN & (1 << 23))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 23));
         if (MP3Player.IsPlaying())
         {
             // Stop playback
@@ -240,19 +244,27 @@ static void CheckButtons(void)
         printf("Current Track: %s \n", Status.curr_track.short_name);
     }
     else if (LPC_GPIO1->FIOPIN & (1 << 28))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 28));
         mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
     }
     else if (LPC_GPIO1->FIOPIN & (1 << 29))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 29));
         MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
     }
     else if (LPC_GPIO1->FIOPIN & (1 << 19))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 19));
         MP3Player.IncrementVolume();
     }
     else if (LPC_GPIO1->FIOPIN & (1 << 20))
-    {   printf("asdf\n");
+    {   
+        DELAY_MS(100);
+        while (LPC_GPIO1->FIOPIN & (1 << 20));
         MP3Player.DecrementVolume();
     }
 }
@@ -417,8 +429,6 @@ void InitButtons()
 
 void DecoderTask(void *p)
 {
-    InitButtons();
-
     // Initialize the SPI
     ssp0_init(0);
 
@@ -428,7 +438,7 @@ void DecoderTask(void *p)
     // Don't start until LCD has selected a song
     PlaySem = xSemaphoreCreateBinary();
     xSemaphoreTake(PlaySem, portMAX_DELAY);
-    Status.next_state = PLAY;
+    // Status.next_state = PLAY;
 
     // Main loop
     while (1)
@@ -447,6 +457,6 @@ void DecoderTask(void *p)
         // printf("4: %s\n", file_names[3].full_name);
 
         // xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
-        // DELAY_MS(1000);
+        DELAY_MS(100);
     }
 }

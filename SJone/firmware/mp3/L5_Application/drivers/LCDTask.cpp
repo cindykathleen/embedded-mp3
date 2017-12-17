@@ -371,6 +371,8 @@ void display_screen()
 
 void LCDTask(void *p)
 {
+    printf("LCD set up.\n");
+
     LPC_GPIO1->FIODIR   &= ~(0x1 << 29);
     LPC_GPIO1->FIODIR   &= ~(0x1 << 28);
     LPC_GPIO1->FIODIR   &= ~(0x1 << 23);
@@ -390,18 +392,26 @@ void LCDTask(void *p)
 
     printSongs(currentSongOffset);
     
+    printf("LCD set up.\n");
+
     while (1)
     {
         if (LPC_GPIO1->FIOPIN & (1 << 22))
         {
+            DELAY_MS(100);
+            while (LPC_GPIO1->FIOPIN & (1 << 22));
             if (currentScreenIndex == 0) moveLineDown();
         }
         else if (LPC_GPIO1->FIOPIN & (1 << 23))
         {
+            DELAY_MS(100);
+            while (LPC_GPIO1->FIOPIN & (1 << 23));
             if (currentScreenIndex == 0) moveLineUp();
         }
         else if (LPC_GPIO1->FIOPIN & (1 << 28))
         {
+            DELAY_MS(100);
+            while (LPC_GPIO1->FIOPIN & (1 << 28));
             if (currentScreenIndex == 0) selectRow(currentSongIndex);
             track_list_set_current_track(currentSongIndex);
             // Unblock DecoderTask
