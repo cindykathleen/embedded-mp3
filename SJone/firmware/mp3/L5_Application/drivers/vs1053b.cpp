@@ -1,27 +1,23 @@
 #include <cstring>
 #include <cmath>
+#include <stdio.h>
+#include "FreeRTOS.h"
+#include "tasks.hpp"
 #include "vs1053b.hpp"
 #include "spi.hpp"
+#include "ssp0.h"
 
-#define SPI     (Spi::getInstance())
-
-//// Need some kind of graceful fail for some functions like SetXDCS
+#define SPI     (Spi0::getInstance())
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VS1053b::VS1053b(vs1053b_gpio_init_t init) :    RESET(init.port_reset, init.pin_reset),
-                                                DREQ(init.port_dreq,   init.pin_dreq),
-                                                XCS(init.port_xcs,     init.pin_xcs),
-                                                XDCS(init.port_xdcs,   init.pin_xdcs)
+VS1053b::VS1053b(vs1053b_gpio_init_t init) :    DREQ(init.port_dreq,   init.pin_dreq),
+                                                RESET(init.port_reset, init.pin_reset, true),
+                                                XCS(init.port_xcs,     init.pin_xcs, true),
+                                                XDCS(init.port_xdcs,   init.pin_xdcs, true)
 {
-    // Initialize SPI
-    SPI.Initialize();
-
-    // Initialize the system and registers, update remote
-    SystemInit();
-
     // Local register default values
     RegisterMap[MODE]        = { .reg_num=MODE,        .can_write=true,  .reset_value=0x4000, .clock_cycles=80,   .reg_value=0 };
     RegisterMap[STATUS]      = { .reg_num=STATUS,      .can_write=true,  .reset_value=0x000C, .clock_cycles=80,   .reg_value=0 };
@@ -40,59 +36,62 @@ VS1053b::VS1053b(vs1053b_gpio_init_t init) :    RESET(init.port_reset, init.pin_
     RegisterMap[AICTRL2]     = { .reg_num=AICTRL2,     .can_write=true,  .reset_value=0x0000, .clock_cycles=80,   .reg_value=0 };
     RegisterMap[AICTRL3]     = { .reg_num=AICTRL3,     .can_write=true,  .reset_value=0x0000, .clock_cycles=80,   .reg_value=0 };
 
-    // Update local register values
-    UpdateRegisterMap();
+    Status.fast_forward_mode  = false;
+    Status.rewind_mode        = false;
+    Status.low_power_mode     = false;
+    Status.playing            = false;
+    Status.waiting_for_cancel = false;
 }
 
 void VS1053b::SystemInit()
 {
-    // Pins initial state
+    // Hardware reset
+    printf("[VS1053b::SystemInit] Resetting device...\n");
     SetReset(false);
-    SetXCS(true);
-    SetXDCS(true);
     SetReset(true);
+    if (!WaitForDREQ(100000)) printf("[VS1053b::SystemInit] Failed to hardware reset timeout of 100000us.\n");
 
-    // Check if booted in RTMIDI mode which causes issues with MP3 not playing
-    // Fix : http://www.bajdi.com/lcsoft-vs1053-mp3-module/#comment-33773
-    UpdateLocalRegister(AUDATA);
-    if (44100 == RegisterMap[AUDATA].reg_value || 44101 == RegisterMap[AUDATA].reg_value)
-    {
-        // Switch to MP3 mode if in RTMIDI mode
-        RegisterMap[WRAMADDR].reg_value = 0xC017;
-        RegisterMap[WRAM].reg_value     = 3;
-        UpdateRegisterMap(WRAMADDR);
-        UpdateRegisterMap(WRAM);
-        RegisterMap[WRAMADDR].reg_value = 0xC019;
-        RegisterMap[WRAM].reg_value     = 0;
-        UpdateRegisterMap(WRAMADDR);
-        UpdateRegisterMap(WRAM);
+    // Software reset
+    if (!SoftwareReset())     printf("[VS1053b::SystemInit] Software reset failed...\n");
+    else                      printf("[VS1053b::SystemInit] Device reset.\n");
 
-        // Wait a little to make sure it was written
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        // Software reset to boot into MP3 mode
-        SoftwareReset();
-    }
+    // Chip selects should start high
+    if (!SetXCS(true))        printf("[VS1053b::SystemInit] Failed to set XCS to HIGH at init.\n");
+    if (!SetXDCS(true))       printf("[VS1053b::SystemInit] Failed to set XDCS to HIGH at init.\n");
 
-    uint16_t mode_default_state   = 0x8002;     // Allow mpeg layers 1 + 2, divide clock by 2 = 12MHz
-    uint16_t bass_default_state   = 0x0000;     // Turn off bass enhancement and treble control
-    uint16_t clock_default_state  = 0x9000;     // Recommended clock rate
-    uint16_t volume_default_state = 0xFEFE;     // Completely silent
+    UpdateLocalRegister(STATUS);
+    printf("[VS1053b::SystemInit] Initial status: %04X\n", RegisterMap[STATUS].reg_value);
+    printf("[VS1053b::SystemInit] Updating device registers with default settings.\n");
+
+    const uint16_t mode_default_state   = 0x4800;
+    const uint16_t clock_default_state  = 0x6000;
+    const uint16_t volume_default_state = 0x2020;
 
     RegisterMap[MODE].reg_value   = mode_default_state;
-    RegisterMap[BASS].reg_value   = bass_default_state;
     RegisterMap[CLOCKF].reg_value = clock_default_state;
     RegisterMap[VOL].reg_value    = volume_default_state;
 
     UpdateRemoteRegister(MODE);
-    UpdateRemoteRegister(BASS);
     UpdateRemoteRegister(CLOCKF);
     UpdateRemoteRegister(VOL);
+
+    // Update local register values
+    if (!UpdateRegisterMap())
+    {
+        printf("[VS1053b::SystemInit] Failed to update register map.\n");
+    }
+
+    printf("[VS1053b::SystemInit] System initialization complete.\n");
 }
 
-vs1053b_transfer_status_t VS1053b::TransferData(uint8_t *data, uint32_t size)
+vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
 {
     // Wait until DREQ goes high
-    while (!DeviceReady()) taskYIELD();
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000us.\n");
+        return TRANSFER_FAILED;
+    }
 
     if (size < 1)
     {
@@ -103,46 +102,60 @@ vs1053b_transfer_status_t VS1053b::TransferData(uint8_t *data, uint32_t size)
         uint32_t cycles    = size / 32;
         uint16_t remainder = size % 32;
 
-        for (int i=0; i<cycles; i++)
+        if (!SetXDCS(false))
         {
-            XDCS.SetLow();
-            for (int i=0; i<32; i++)
-            {
-                SPI.SendByte(data[i]);
-            }
-            XDCS.SetHigh();
+            printf("TRANSFERDATA: Failed to set XDCS low!\n");
+            return TRANSFER_FAILED;
+        }
 
-            // Check for pending cancellation request
-            if (StatusMap.waiting_for_cancel)
+        for (uint32_t i=0; i<cycles; i++)
+        {
+            for (int byte=0; byte<32; byte++)
             {
-                // Check cancel bit
-                UpdateLocalRegister(MODE);
-                // Cancel succeeded, exit
-                if (RegisterMap[MODE].reg_value & (1 << 3))
-                {
-                    return TRANSFER_CANCELLED;
-                }
+                ssp0_exchange_byte(data[i * 32 + byte]);
             }
             
             // Wait until DREQ goes high
-            while (!DeviceReady()) taskYIELD();
+            if (!WaitForDREQ(100000))
+            {
+                printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
+                return TRANSFER_FAILED;
+            }
         }
 
         if (remainder > 0)
         {
-            for (int i=0; i<remainder; i++)
+            for (int byte=0; byte<remainder; byte++)
             {
-                XDCS.SetLow();
-                for (int i=0; i<remainder; i++)
-                {
-                    SPI.SendByte(data[i]);
-                }
-                XDCS.SetHigh();
-                
-                // Wait until DREQ goes high
-                while (!DeviceReady()) taskYIELD();
+                ssp0_exchange_byte(data[cycles * 32 + byte]);
+            }
+            
+            // Wait until DREQ goes high
+            if (!WaitForDREQ(100000))
+            {
+                printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
+                return TRANSFER_FAILED;
             }
         }
+
+        if (!SetXDCS(true))
+        {
+            printf("TRANSFERDATA: Failed to set XDCS low!\n");
+            return TRANSFER_FAILED;
+        }
+
+        // Check for pending cancellation request
+        if (Status.waiting_for_cancel)
+        {
+            // Check cancel bit
+            UpdateLocalRegister(MODE);
+            // Cancel succeeded, exit, and return status to bubble up to parent function
+            if (RegisterMap[MODE].reg_value & (1 << 3))
+            {
+                return TRANSFER_CANCELLED;
+            }
+        }
+
         return TRANSFER_SUCCESS;
     }
 }
@@ -150,13 +163,13 @@ vs1053b_transfer_status_t VS1053b::TransferData(uint8_t *data, uint32_t size)
 void VS1053b::HardwareReset()
 {
     // Pull reset line low
-    SetResetPinValue(false);
+    SetReset(false);
 
     // Wait 1 ms, should wait shorter if possible
     vTaskDelay(1 / portTICK_PERIOD_MS);
 
     // Pull reset line back high
-    SetResetPinValue(true);
+    SetReset(true);
 
     // Wait for 3 us at a time until DREQ goes high
     while (!DeviceReady())
@@ -167,57 +180,92 @@ void VS1053b::HardwareReset()
 
 bool VS1053b::SoftwareReset()
 {
+    const uint16_t RESET_BIT = (1 << 2);
+
     UpdateLocalRegister(MODE);
 
     // Set reset bit
-    RegisterMap[MODE].reg_value |= (1 << 2);
+    RegisterMap[MODE].reg_value |= RESET_BIT;
     UpdateRemoteRegister(MODE);
 
-    uint16_t elapsed_us = 0;
-    // Wait for 3 us at a time until DREQ goes high
-    while (!DeviceReady())
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
     {
-        BlockMicroSeconds(3);
-        elapsed_us += 3;
-
-        // Should not take more than 1 millisecond
-        if (elapsed_us > 1000)
-        {
-            HardwareReset();
-            return false;
-        }
+        printf("[VS1053b::SoftwareReset] Failed to software reset timeout of 100000us.\n");
+        return false;
     }
-
-    // Re-initialize registers
-    SystemInit();
 
     // Reset bit is cleared automatically
     return true;
+}
+
+void VS1053b::PrintDebugInformation()
+{
+    if (!UpdateRegisterMap())
+    {
+        printf("[VS1053b::PrintDebugInformation] Failed to update register map.\n");
+    }
+    UpdateHeaderInformation();
+
+    printf("------------------------------------------------------\n");
+    printf("Sample Rate     : %d\n", RegisterMap[AUDATA].reg_value);
+    printf("Decoded Time    : %d\n", RegisterMap[DECODE_TIME].reg_value);
+    printf("------------------------------------------------------\n");
+    printf("Header Information\n");
+    printf("------------------------------------------------------\n");
+    printf("stream_valid    : %d\n", Header.stream_valid);
+    printf("id              : %d\n", Header.id);
+    printf("layer           : %d\n", Header.layer);
+    printf("protect_bit     : %d\n", Header.protect_bit);
+    printf("bit_rate        : %lu\n", Header.bit_rate);
+    printf("sample_rate     : %d\n", Header.sample_rate);
+    printf("pad_bit         : %d\n", Header.pad_bit);
+    printf("mode            : %d\n", Header.mode);
+    printf("------------------------------------------------------\n");
+    printf("MODE            : %04X\n", RegisterMap[MODE].reg_value);
+    printf("STATUS          : %04X\n", RegisterMap[STATUS].reg_value);
+    printf("BASS            : %04X\n", RegisterMap[BASS].reg_value);
+    printf("CLOCKF          : %04X\n", RegisterMap[CLOCKF].reg_value);
+    printf("DECODE_TIME     : %04X\n", RegisterMap[DECODE_TIME].reg_value);
+    printf("AUDATA          : %04X\n", RegisterMap[AUDATA].reg_value);
+    printf("WRAM            : %04X\n", RegisterMap[WRAM].reg_value);
+    printf("WRAMADDR        : %04X\n", RegisterMap[WRAMADDR].reg_value);
+    printf("HDAT0           : %04X\n", RegisterMap[HDAT0].reg_value);
+    printf("HDAT1           : %04X\n", RegisterMap[HDAT1].reg_value);
+    printf("AIADDR          : %04X\n", RegisterMap[AIADDR].reg_value);
+    printf("VOL             : %04X\n", RegisterMap[VOL].reg_value);
+    printf("AICTRL0         : %04X\n", RegisterMap[AICTRL0].reg_value);
+    printf("AICTRL1         : %04X\n", RegisterMap[AICTRL1].reg_value);
+    printf("AICTRL2         : %04X\n", RegisterMap[AICTRL2].reg_value);
+    printf("AICTRL3         : %04X\n", RegisterMap[AICTRL3].reg_value);
+    printf("------------------------------------------------------\n");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                           API FUNCTIONS                                        //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool VS1053b::CancelDecoding()
+void VS1053b::CancelDecoding()
 {
-    static const uint8_t CANCEL_BIT = (1 << 3);
+    const uint8_t CANCEL_BIT = (1 << 3);
 
     UpdateLocalRegister(MODE);
     RegisterMap[MODE].reg_value |= CANCEL_BIT;
     UpdateRemoteRegister(MODE);
 
-    StatusMap.waiting_for_cancel = true;
-    // TODO: Handle cancel logic, needs state machine
-    // SendEndFillByte(2052);
+    // Set flag to request cancellation
+    // Status.waiting_for_cancel = true;
+    Status.playing = false;
+
+    printf("[VS1053b::CancelDecoding] Waiting for cancel...\n");
 }
 
 void VS1053b::SetEarSpeakerMode(ear_speaker_mode_t mode)
 {
     UpdateLocalRegister(MODE);
 
-    static const uint16_t low_bit  = (1 << 4);
-    static const uint16_t high_bit = (1 << 7);
+    const uint16_t low_bit  = (1 << 4);
+    const uint16_t high_bit = (1 << 7);
 
     switch (mode)
     {
@@ -246,7 +294,7 @@ void VS1053b::SetStreamMode(bool on)
 {
     UpdateLocalRegister(MODE);
 
-    static const uint16_t stream_bit = (1 << 6);
+    const uint16_t stream_bit = (1 << 6);
 
     if (on)
     {
@@ -264,7 +312,7 @@ void VS1053b::SetClockDivider(bool on)
 {
     UpdateLocalRegister(MODE);
 
-    static const uint16_t clock_range_bit = (1 << 15);
+    const uint16_t clock_range_bit = (1 << 15);
 
     if (on)
     {
@@ -316,6 +364,36 @@ void VS1053b::SetVolume(uint8_t left_vol, uint8_t right_vol)
     UpdateRemoteRegister(VOL);
 }
 
+void VS1053b::IncrementVolume(void)
+{
+    const uint8_t increment_step = 0xFF / 32;
+
+    uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
+    uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
+    left_vol  = (left_vol  + increment_step > 0xFF) ? (0xFF) : (left_vol  + increment_step);
+    right_vol = (right_vol + increment_step > 0xFF) ? (0xFF) : (right_vol + increment_step);
+    RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
+
+    UpdateRemoteRegister(VOL);
+
+    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
+}
+
+void VS1053b::DecrementVolume(void)
+{
+    const uint8_t increment_step = 0xFF / 32;
+
+    uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
+    uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
+    left_vol  = (left_vol  - increment_step < 0) ? (0) : (left_vol  - increment_step);
+    right_vol = (right_vol - increment_step < 0) ? (0) : (right_vol - increment_step);
+    RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
+
+    UpdateRemoteRegister(VOL);
+
+    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
+}
+
 void VS1053b::SetLowPowerMode(bool on)
 {
     if (on)
@@ -335,7 +413,7 @@ void VS1053b::SetLowPowerMode(bool on)
             SetEarSpeakerMode(EAR_SPEAKER_OFF);
 
             // Turn off analog drivers
-            SetVolume(0xFFFF);
+            SetVolume(0xFF, 0xFF);
         }
     }
     else
@@ -344,7 +422,7 @@ void VS1053b::SetLowPowerMode(bool on)
         if (Status.low_power_mode)
         {
             // Turn off analog drivers
-            SetVolume(0xFFFF);
+            SetVolume(0xFF, 0xFF);
 
             // Turn off ear speaker mode
             SetEarSpeakerMode(EAR_SPEAKER_OFF);
@@ -359,52 +437,47 @@ void VS1053b::SetLowPowerMode(bool on)
         }
     }
 
-    StatusMap.low_power_mode = on;
+    Status.low_power_mode = on;
 }
 
-void VS1053b::PlayEntireSong(uint8_t *mp3, uint32_t size)
+vs1053b_transfer_status_E VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment)
 {
-    // Clear decode time
-    ClearDecodeTime();
+    static uint32_t segment_counter = 0;
+    const  uint8_t dummy_short[] = { 0x00, 0x00 };
 
-    // Send 2 dummy bytes to SDI
-    static const uint8_t dummy_short[] = { 0x00, 0x00 };
-    TransferData(&dummy_short, 2);
-
-    StatusMap.playing = true;
-
-    // Send mp3 file
-    TransferData(mp3, size);
-
-    // To signal the end of the mp3 file need to set 2052 bytes of EndFillByte
-    SendEndFillByte(2052);
-
-    // Wait 50 ms buffer time between playbacks
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-
-    StatusMap.playing = false;
-}
-
-void VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment)
-{
     // If first segment, set up for playback
-    if (!StatusMap.playing)
+    if (!Status.playing)
     {
+        printf("[VS1053b::PlaySegment] Playback starting...\n");
+
+        // Reset counter
+        segment_counter = 0;
+
         // Clear decode time
         ClearDecodeTime();
 
         // Send 2 dummy bytes to SDI
-        static const uint8_t dummy_short[] = { 0x00, 0x00 };
-        TransferData(&dummy_short, 2);
+        TransferData((uint8_t*)dummy_short, 2);
 
-        StatusMap.playing = true;
+        Status.playing = true;
     }
 
     // Send mp3 file
-    TransferData(mp3, size);
+    vs1053b_transfer_status_E status = TransferData(mp3, size);
+    switch (status)
+    {
+        case TRANSFER_SUCCESS:
+            break;
+        case TRANSFER_FAILED:
+            printf("[VS1053b::PlaySegment] Transfer failed on %lu segment!\n", segment_counter);
+            break;
+        case TRANSFER_CANCELLED:
+            printf("[VS1053b::PlaySegment] Transfer cancelled on %lu segment!\n", segment_counter);
+            break;
+    }
 
     // Clean up if last segment
-    if (last_segment)
+    if (last_segment || TRANSFER_CANCELLED == status)
     {
         // To signal the end of the mp3 file need to set 2052 bytes of EndFillByte
         SendEndFillByte(2052);
@@ -412,8 +485,22 @@ void VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment)
         // Wait 50 ms buffer time between playbacks
         vTaskDelay(50 / portTICK_PERIOD_MS);
 
-        StatusMap.playing = false;
+        // Update status flags
+        Status.playing = false;
+
+        if (TRANSFER_CANCELLED == status)
+        {
+            Status.waiting_for_cancel = false;
+        }
+
+        segment_counter = 0;
     }
+    else
+    {
+        ++segment_counter;
+    }
+
+    return status;
 }
 
 void SwitchPlayback(uint8_t *mp3, uint32_t size)
@@ -421,9 +508,23 @@ void SwitchPlayback(uint8_t *mp3, uint32_t size)
     // Not implemented yet
 }
 
-void SetFastForwardMode(bool on)
+void VS1053b::SetFastForwardMode(bool on)
 {
-    // Not implemented yet
+    // TODO : make it configurable
+    const uint16_t play_speed_register_address = 0x1E04;
+
+    if (on)
+    {
+        const uint16_t double_speed = 0x0002;
+        WriteRam(play_speed_register_address, double_speed);
+        Status.fast_forward_mode = true;
+    }
+    else
+    {
+        const uint16_t normal_speed = 0x0001;
+        WriteRam(play_speed_register_address, normal_speed);
+        Status.fast_forward_mode = false;
+    }
 }
 
 void SetRewindMode(bool on)
@@ -435,6 +536,11 @@ void SetRewindMode(bool on)
 //                                         GETTER FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+bool VS1053b::GetFastForwardMode()
+{
+    return Status.fast_forward_mode;
+}
+
 uint16_t VS1053b::GetSampleRate()
 {
     UpdateLocalRegister(AUDATA);
@@ -443,11 +549,9 @@ uint16_t VS1053b::GetSampleRate()
     return (RegisterMap[AUDATA].reg_value & 1) ? (RegisterMap[AUDATA].reg_value - 1) : (RegisterMap[AUDATA].reg_value);
 }
 
-vs1053b_status_t VS1053b::GetStatus()
+vs1053b_status_S* VS1053b::GetStatus()
 {
-    UpdateLocalRegister(STATUS);
-
-    return RegisterMap[STATUS].reg_value;
+    return &Status;
 }
 
 uint16_t VS1053b::GetCurrentDecodedTime()
@@ -463,44 +567,44 @@ void VS1053b::UpdateHeaderInformation()
     UpdateLocalRegister(HDAT1);
 
     // Clear header
-    memset(Header, 0, sizeof(Header));
+    memset(&Header, 0, sizeof(Header));
 
     // Copy registers to bit fields
-    Header.reg1 = RegisterMap[HDAT1].reg_value;
-    Header.reg0 = RegisterMap[HDAT0].reg_value;
+    Header.reg1.value = RegisterMap[HDAT1].reg_value;
+    Header.reg0.value = RegisterMap[HDAT0].reg_value;
 
     // HDAT1
-    Header.stream_valid = (Header.reg1.sync_word) == 2047;
-    Header.id           = Header.reg1.id;
-    Header.layer        = Header.reg1.layer;
-    Header.protect_bit  = Header.reg1.protect_bit;
+    Header.stream_valid = (Header.reg1.bits.sync_word) == 2047;
+    Header.id           = Header.reg1.bits.id;
+    Header.layer        = Header.reg1.bits.layer;
+    Header.protect_bit  = Header.reg1.bits.protect_bit;
 
     // HDAT0
-    Header.pad_bit      = Header.reg0.pad_bit;
-    Header.mode         = Header.reg0.mode;
+    Header.pad_bit      = Header.reg0.bits.pad_bit;
+    Header.mode         = Header.reg0.bits.mode;
 
     // Lookup sample rate
-    switch (Header.reg0.sample_rate)
+    switch (Header.reg0.bits.sample_rate)
     {
         case 3:
             // No sample rate
             break;
         case 2:
-            switch (layer)
+            switch (Header.layer)
             {
                 case 3:  Header.sample_rate = 32000; break;
                 case 2:  Header.sample_rate = 16000; break;
                 default: Header.sample_rate =  8000; break;
             }
         case 1:
-            switch (layer)
+            switch (Header.layer)
             {
                 case 3:  Header.sample_rate = 48000; break;
                 case 2:  Header.sample_rate = 24000; break;
                 default: Header.sample_rate = 12000; break;
             }
         case 0:
-            switch (layer)
+            switch (Header.layer)
             {
                 case 3:  Header.sample_rate = 44100; break;
                 case 2:  Header.sample_rate = 22050; break;
@@ -511,24 +615,24 @@ void VS1053b::UpdateHeaderInformation()
     // Calculate bit rate
     uint16_t increment_value = 0;
     uint16_t start_value     = 0;
-    switch (layer)
+    switch (Header.layer)
     {
         case 1: 
-            switch (id)
+            switch (Header.id)
             {
                 case 3:  increment_value = 32; start_value = 32; break;
                 default: increment_value = 8;  start_value = 32; break;
             }
             break;
         case 2: 
-            switch (id)
+            switch (Header.id)
             {
                 case 3:  increment_value = 16; start_value = 32; break;
                 default: increment_value = 8;  start_value = 8;  break;
             }
             break;
         case 3: 
-            switch (id)
+            switch (Header.id)
             {
                 case 3:  increment_value = 8; start_value = 32; break;
                 default: increment_value = 8; start_value = 8;  break;
@@ -537,17 +641,17 @@ void VS1053b::UpdateHeaderInformation()
     }
 
     const uint16_t bits_in_kilobit = (1 << 10);
-    if (Header.reg0.bit_rate != 0 && Header.reg0.bit_rate != 0xF)
+    if (Header.reg0.bits.bit_rate != 0 && Header.reg0.bits.bit_rate != 0xF)
     {
-        Header.bit_rate = (start_value + (increment_value * (Header.reg0.bit_rate-1))) * bits_in_kilobit;
+        Header.bit_rate = (start_value + (increment_value * (Header.reg0.bits.bit_rate-1))) * bits_in_kilobit;
     }
 }
 
-mp3_header_t VS1053b::GetHeaderInformation()
+vs1053b_mp3_header_S* VS1053b::GetHeaderInformation()
 {
     UpdateHeaderInformation();
 
-    return Header;
+    return &Header;
 }
 
 uint32_t VS1053b::GetBitRate()
@@ -559,7 +663,7 @@ uint32_t VS1053b::GetBitRate()
 
 bool VS1053b::IsPlaying()
 {
-    return StatusMap.playing;
+    return Status.playing;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -575,8 +679,12 @@ inline bool VS1053b::SetXDCS(bool value)
     }
     else 
     {
+        if (value)
+            LPC_GPIO0->FIOSET |= (1 << 30);
+        else
+            LPC_GPIO0->FIOCLR |= (1 << 30);
         XDCS.SetValue(value);
-        return value;
+        return true;
     }
 }
 
@@ -594,8 +702,8 @@ inline bool VS1053b::SetXCS(bool value)
     }
     else 
     {
-        XDCS.SetValue(value);
-        return value;
+        XCS.SetValue(value);
+        return true;
     }
 }
 
@@ -642,7 +750,11 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
     uint16_t data = 0;
 
     // Wait until DREQ goes high
-    while (!DeviceReady()) taskYIELD();
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::UpdateLocalRegister] Failed to update register: %d, DREQ timeout of 100000.\n", reg);
+        return false;
+    }
 
     // Select XCS
     if (!SetXCS(false))
@@ -652,13 +764,24 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
     }
     else
     {
-        SPI.SendByte(OPCODE_READ);
-        SPI.SendByte(reg);
-        data |= SPI.ReceiveByte() << 8;
-        data |= SPI.ReceiveByte();
+        // SPI.SendByte(OPCODE_READ);
+        // SPI.SendByte(reg);
+        // data |= SPI.ReceiveByte() << 8;
+        // data |= SPI.ReceiveByte();
+        ssp0_exchange_byte(OPCODE_READ);
+        ssp0_exchange_byte(reg);
+        data |= ssp0_exchange_byte(0x00) << 8;
+        data |= ssp0_exchange_byte(0x00);
+        RegisterMap[reg].reg_value = data;
         SetXCS(true);
-
         return true;
+    }
+
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::UpdateLocalRegister] Failed to update register: %d, DREQ timeout of 100000.\n", reg);
+        return false;
     }
 }
 
@@ -668,7 +791,7 @@ inline bool VS1053b::UpdateRemoteRegister(SCI_reg reg)
     return (RegisterMap[reg].can_write) ? (TransferSCICommand(reg)) : (false);
 }
 
-inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
+inline void VS1053b::ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
 {
     if (bit_value)
     {
@@ -684,44 +807,103 @@ inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
 //                                       PRIVATE FUNCTIONS                                        //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+bool VS1053b::WaitForDREQ(uint32_t timeout_us)
+{
+    // Wait until DREQ goes high
+    while (!DeviceReady())
+    {
+        BlockMicroSeconds(100);
+        timeout_us -= 100;
+        if (timeout_us == 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 uint16_t VS1053b::ReadRam(uint16_t address)
 {
-    // Make sure it is clear
-    uint16_t data = 0;
-
     // Wait until DREQ goes high
-    while (!DeviceReady()) taskYIELD();
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
+        return 0;
+    }
 
     XCS.SetLow();
 
     // Write address into WRAMADDR
-    SPI.SendByte(OPCODE_WRITE);
-    SPI.SendByte(WRAMADDR);
-    SPI.SendByte(address);
+    // ssp0_exchange_byte(OPCODE_WRITE);
+    // ssp0_exchange_byte(WRAMADDR);
+    // ssp0_exchange_byte(address >> 8);
+    // ssp0_exchange_byte(address & 0xFF);
+    RegisterMap[WRAMADDR].reg_value = address;
+    UpdateRemoteRegister(WRAMADDR);
 
-    while (!DeviceReady()) taskYIELD();
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
+        return 0;
+    }
 
     XCS.SetHigh();
     XCS.SetLow();
 
     // Start reading
-    SPI.SendByte(OPCODE_READ);
-    SPI.SendByte(WRAM);
-    data |= SPI.ReceiveByte() << 8;
-    data |= SPI.ReceiveByte();
+    // ssp0_exchange_byte(OPCODE_READ);
+    // ssp0_exchange_byte(WRAM);
+    // data |= ssp0_exchange_byte(0x00) << 8;
+    // data |= ssp0_exchange_byte(0x00);
+    UpdateLocalRegister(WRAM);
 
     XCS.SetHigh();
 
-    return data;
+    return RegisterMap[WRAM].reg_value;
 }
 
-uint8_t GetEndFillByte()
+bool VS1053b::WriteRam(uint16_t address, uint16_t value)
 {
-    static const uint16_t end_fill_byte_address = 0x1E06;
-    const uint16_t byte = ReadRam(end_fill_byte_address);
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
+        return false;
+    }
+
+    XCS.SetLow();
+
+    // Write address into WRAMADDR
+    RegisterMap[WRAMADDR].reg_value = address;
+    UpdateRemoteRegister(WRAMADDR);
+
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
+        return false;
+    }
+
+    XCS.SetHigh();
+    XCS.SetLow();
+
+    // Write data in WRAM
+    RegisterMap[WRAM].reg_value = value;
+    UpdateRemoteRegister(WRAM);
+
+    XCS.SetHigh();
+
+    return true;
+}
+
+uint8_t VS1053b::GetEndFillByte()
+{
+    const uint16_t end_fill_byte_address = 0x1E06;
+    const uint16_t half_word = ReadRam(end_fill_byte_address);
 
     // Ignore upper byte
-    return byte & 0xFF;
+    return half_word & 0xFF;
 }
 
 void VS1053b::BlockMicroSeconds(uint16_t microseconds)
@@ -744,13 +926,14 @@ float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
     uint32_t XTALI = (frequency * 4000 + 8000000);
     uint32_t CLKI  = XTALI * (multiplier + adder);
 
+    float microseconds_per_cycle = 1000.0f * 1000.0f;
     if (is_clockf)
     {
-        float microseconds_per_cycle = 1000.0f * 1000.0f / XTALI;
+        microseconds_per_cycle /= XTALI;
     }
     else
     {
-        float microseconds_per_cycle = 1000.0f * 1000.0f / CLKI;
+        microseconds_per_cycle /= CLKI;
     }
 
     return ceil(microseconds_per_cycle * clock_cycles) + 1;
@@ -759,7 +942,11 @@ float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
 bool VS1053b::TransferSCICommand(SCI_reg reg)
 {
     // Wait until DREQ goes high
-    while (!DeviceReady()) taskYIELD();
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::TransferSCICommand] Failed to update register: %d, DREQ timeout of 100000us.\n", reg);
+        return false;
+    }
 
     // Select XCS
     if (!SetXCS(false))
@@ -768,24 +955,35 @@ bool VS1053b::TransferSCICommand(SCI_reg reg)
         return false;
     }
     // High byte first
-    SPI.SendByte(OPCODE_WRITE);
-    SPI.SendByte(reg);
-    SPI.SendByte(RegisterMap[reg].reg_value >> 8);
-    SPI.SendByte(RegisterMap[reg].reg_value & 0xFF);
+    // SPI.SendByte(OPCODE_WRITE);
+    // SPI.SendByte(reg);
+    // SPI.SendByte(RegisterMap[reg].reg_value >> 8);
+    // SPI.SendByte(RegisterMap[reg].reg_value & 0xFF);
+    ssp0_exchange_byte(OPCODE_WRITE);
+    ssp0_exchange_byte(reg);
+    ssp0_exchange_byte(RegisterMap[reg].reg_value >> 8);
+    ssp0_exchange_byte(RegisterMap[reg].reg_value & 0xFF);
     // Deselect XCS
     SetXCS(true);
 
-    // CLOCKF is the only register where the calculation is based on XTALI not CLKI
-    const bool reg_is_clockf = (CLOCKF == reg);
+    // // CLOCKF is the only register where the calculation is based on XTALI not CLKI
+    // const bool reg_is_clockf = (CLOCKF == reg);
 
-    // Delay amount of time after writing to SCI register to safely execute other commands
-    uint8_t delay_us = ClockCyclesToMicroSeconds(RegisterMap[reg].clock_cycles, reg_is_clockf);
-    BlockMicroSeconds(delay_us);
+    // // Delay amount of time after writing to SCI register to safely execute other commands
+    // uint8_t delay_us = ClockCyclesToMicroSeconds(RegisterMap[reg].clock_cycles, reg_is_clockf);
+    // BlockMicroSeconds(delay_us);
+
+    // Wait until DREQ goes high
+    if (!WaitForDREQ(100000))
+    {
+        printf("[VS1053b::TransferSCICommand] Failed to update register: %d, DREQ timeout of 100000us.\n", reg);
+        return false;
+    }
 
     return true;
 }
 
-bool VS1053b::SendEndFillByte(uint16_t size)
+void VS1053b::SendEndFillByte(uint16_t size)
 {
     const uint8_t end_fill_byte = GetEndFillByte();
     // Uses an array of 32 bytes instead of the 2048+ bytes to conserve stack space
@@ -800,10 +998,15 @@ bool VS1053b::SendEndFillByte(uint16_t size)
 
 bool VS1053b::UpdateRegisterMap()
 {
-    for (int i=0; i<SCI_reg_last_invalid; i++)
+    for (int reg=MODE; reg<SCI_reg_last_invalid; reg++)
     {
-        if (!UpdateLocalRegister(i))
+        if (reg == (SCI_reg)AIADDR)
         {
+            continue;
+        }
+        else if (!UpdateLocalRegister((SCI_reg)reg))
+        {
+            printf("[VS1053b::UpdateRegisterMap] Failed at reg %d\n", reg);
             return false;
         }
     }

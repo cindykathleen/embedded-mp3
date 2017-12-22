@@ -1,15 +1,15 @@
 #pragma once
 #include <stop_watch.hpp>
-#include "L5_Application/drivers/gpio_input.hpp"
-#include "L5_Application/drivers/gpio_output.hpp"
-#include "L5_Application/drivers/spi.hpp"
+#include "gpio_input.hpp"
+#include "gpio_output.hpp"
+#include "spi.hpp"
 
 typedef enum
 {
     TRANSFER_SUCCESS,
     TRANSFER_FAILED,
     TRANSFER_CANCELLED
-} vs1053b_transfer_status_t;
+} vs1053b_transfer_status_E;
 
 typedef enum
 {
@@ -68,27 +68,36 @@ typedef struct
     bool     pad_bit;
     uint8_t  mode;
 
-    struct
+    union
     {
-        uint8_t protect_bit : 1,
-        uint8_t layer       : 2,
-        uint8_t id          : 2,
-        uint8_t sync_word   : 11
+        struct
+        {
+            uint8_t protect_bit : 1;
+            uint8_t layer       : 2;
+            uint8_t id          : 2;
+            uint16_t sync_word  : 11;
+        } bits;
+        uint16_t value;
     } reg1;
 
-    struct
+    union
     {
-        uint8_t emphasis    : 2,
-        uint8_t original    : 1,
-        uint8_t copyright   : 1,
-        uint8_t extension   : 2,
-        uint8_t mode        : 2,
-        uint8_t private_bit : 1,
-        uint8_t pad_bit     : 1,
-        uint8_t sample_rate : 2,
-        uint8_t bit_rate    : 4
+        struct
+        {
+            uint8_t emphasis    : 2;
+            uint8_t original    : 1;
+            uint8_t copyright   : 1;
+            uint8_t extension   : 2;
+            uint8_t mode        : 2;
+            uint8_t private_bit : 1;
+            uint8_t pad_bit     : 1;
+            uint8_t sample_rate : 2;
+            uint8_t bit_rate    : 4;
+        } bits;
+        uint16_t value;
     } reg0;
-} __attribute__((packed)) mp3_header_t;
+
+} __attribute__((packed)) vs1053b_mp3_header_S;
 
 typedef struct
 {
@@ -109,16 +118,7 @@ typedef struct
     bool low_power_mode;
     bool playing;
     bool waiting_for_cancel;
-} __attribute__((packed)) vs1053b_status_t;
-
-// Status of the VS1053b driver, for other tasks to see
-vs1053b_status_t StatusMap = {
-    .fast_forward_mode  = false,
-    .rewind_mode        = false,
-    .low_power_mode     = false,
-    .playing            = false,
-    .waiting_for_cancel = false,
-};
+} __attribute__((packed)) vs1053b_status_S;
 
 class VS1053b
 {
@@ -136,25 +136,26 @@ public:
     void SystemInit();
 
     // @description     : Sends data to the device
-    // @param address   : Address of register to write the data to
     // @param data      : The data byte to write
     // @param size      : Size of array to transfer
     // @returns         : Status after transfer
-    vs1053b_transfer_status_t TransferData(uint16_t address, uint8_t *data, uint32_t size);
+    vs1053b_transfer_status_E TransferData(uint8_t *data, uint32_t size);
 
     // @description     : Perform a hardware reset
     void HardwareReset();
 
     // @description     : Perform a software reset
-    void SoftwareReset();
+    // @returns         : True for success, false for unsuccessful (timeout)
+    bool SoftwareReset();
+
+    void PrintDebugInformation();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                           API FUNCTIONS                                        //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // @description     : Cancels the decoding if in the process of decoding
-    // @returns         : True for successful, false for unsuccessful
-    bool CancelDecoding();
+    // @description     : Sets flag to request cancellation
+    void CancelDecoding();
 
     // @description     : Sets the ear speaking procecssing mode
     // @param mode      : Either off, minimal, normal, or extreme
@@ -185,7 +186,10 @@ public:
     // @description     : Sets the volume register, left and right volumes can be different
     // @param left_vol  : Volume of the left speaker
     // @param right_vol : Volume of the right speaker
-    void SetVolume(uint16_t left_vol, uint16_t right_vol);
+    void SetVolume(uint8_t left_vol, uint8_t right_vol);
+
+    void IncrementVolume(void);
+    void DecrementVolume(void);
 
     // @description     : Turns on or off the lower power mode
     // @param on        : True for on, false for off
@@ -200,7 +204,8 @@ public:
     // @param mp3          : Array of mp3 file bytes
     // @param size         : Size of the arrray of file
     // @param last_segment : True for end of file, runs clean up routine, false for not end of file
-    void VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment);
+    // @returns            : Status of transfer
+    vs1053b_transfer_status_E PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment);
 
     // @description     : Switches current playback to another mp3 file
     // @param mp3       : Array of mp3 file bytes
@@ -219,13 +224,15 @@ public:
     //                                         GETTER FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    bool GetFastForwardMode();
+
     // @description     : Get the current sample rate
     // @returns         : The current sample rate
     uint16_t GetSampleRate();
 
     // @description     : Returns the current status struct
     // @returns         : Current status struct
-    vs1053b_status_t GetStatus();
+    vs1053b_status_S* GetStatus();
 
     // @description     : Read the current decoding time register
     // @returns         : The current decoding time in seconds
@@ -237,7 +244,7 @@ public:
 
     // @description     : Parses the header information of the current mp3 file
     // @returns         : Struct of the header information
-    mp3_header_t GetHeaderInformation();
+    vs1053b_mp3_header_S* GetHeaderInformation();
 
     // @description     : Reads the current bit rate setting
     // @returns         : The current bit rate
@@ -253,16 +260,16 @@ private:
 
     // Pins for VS1053B interfacing
     // Must be initialized before using driver
-    GpioOutput RESET;
     GpioInput  DREQ;
+    GpioOutput RESET;
     GpioOutput XCS;
     GpioOutput XDCS;
 
     // Stores a struct of the current mp3's header information
-    mp3_header_t Header;
+    vs1053b_mp3_header_S Header;
 
     // Stores a struct of status information to be transmitted
-    vs1053b_status_t Status;
+    vs1053b_status_S Status;
 
     // Stores a map of structs of each register's values and information
     SCI_reg_t RegisterMap[SCI_reg_last_invalid];
@@ -312,27 +319,35 @@ private:
 
     // @description     : Reads the register on the device and updates the RegisterMap
     // @param reg       : Enum of the register
-    inline void UpdateLocalRegister(SCI_reg reg);
+    inline bool UpdateLocalRegister(SCI_reg reg);
 
     // @description     : Writes to the register from the value in the RegisterMap
     // @param reg       : Enum of the register
+    // @returns         : True for successful, false for unsuccessful
     inline bool UpdateRemoteRegister(SCI_reg reg);
 
     // @description     : Change a single bit of one of the SCI registers
     // @param reg       : Specifies which SCI register
     // @param bit       : Specifies which bit of the SCI register
     // @param bit_value : Specifies value of bit to set, true for 1, false for 0
-    // @returns         : True for successfully set, false for unsuccessful
-    inline bool ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value);
+    inline void ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                        PRIVATE FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    bool WaitForDREQ(uint32_t timeout_us=1000);
+
     // @description     : Read a register from RAM that is not a command register
     // @param address   : Address of register to read the data from
     // @returns         : Value of register
     uint16_t ReadRam(uint16_t address);
+
+    // @description     : Writes a value to RAM that is not a command register
+    // @param address   : Address of register to write the data to
+    // @param value     : The value to write to the register
+    // @returns         : True for successful, false for unsuccessful
+    bool WriteRam(uint16_t address, uint16_t value);
 
     // @description     : Sends local SCI register value to remote
     // @param reg       : The specified register
@@ -346,7 +361,7 @@ private:
     // @description     : Sends the end fill byte for x amount of transfers
     // @param size      : The amount of end fill bytes to send
     // @returns         : True for successful, false for unsuccessful
-    bool SendEndFillByte(uint16_t size);
+    void SendEndFillByte(uint16_t size);
 
     // @description     : Updates the header struct with fresh information
     void UpdateHeaderInformation();
@@ -365,7 +380,8 @@ private:
     void UpdateStatusMap();
 
     // @description     : Reads the value of each register and updates the register map
-    void UpdateRegisterMap();
+    // @returns         : True for successful, false for unsuccessful
+    bool UpdateRegisterMap();
 
     // @description     : Decode time register does not clear automatically so must be explicitly cleared
     void ClearDecodeTime();
