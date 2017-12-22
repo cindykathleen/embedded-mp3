@@ -1,0 +1,160 @@
+{% load static %}
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Tell the browser to be responsive to screen width -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <!-- Favicon icon -->
+    <title>mp3 Controls</title>
+    <!-- Bootstrap Core CSS -->
+    <link href="{% static 'assets/plugins/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'assets/plugins/dropify/dist/css/dropify.min.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!-- Custom CSS -->
+    <link href="{% static 'css/style.css' %}" rel="stylesheet">
+    <!-- You can change the theme colors from here -->
+    <link href="{% static 'css/colors/blue.css' %}" id="theme" rel="stylesheet">
+</head>
+
+<body class="fix-header card-no-border">
+
+    <!-- ============================================================== -->
+    <!-- Main wrapper - style you can find in pages.scss -->
+    <!-- ============================================================== -->
+    <div id="main-wrapper">
+        
+            <!-- ============================================================== -->
+            <!-- Container fluid  -->
+            <!-- ============================================================== -->
+            <div class="container-fluid">
+               
+                <!-- ============================================================== -->
+                <!-- Start Page Content -->
+                <!-- ============================================================== -->
+                <div class="row"><p><br><br><br><br></p></div>
+                <div class="row">
+                    <div class="col-lg-12 col-md-12">
+                        <div class="card" align="center">
+
+                            <div> &nbsp; </div>
+                            <div class="card-block">
+                                <h4 class="card-title" align="center" >MP3 Controls</h4>
+                                <!-- <label for="input-file-now">input file — Default version</label>
+                                <input type="file" id="input-file-now" class="dropify" /> -->
+                            </div>
+                            <div> &nbsp; </div>
+                            <div>
+                                <a href="{% url 'volDOWN' %}"><i class="fa fa-volume-down"" style="font-size:48px;color:black"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'shuffle' %}"><i class="fa fa-random"" style="font-size:48px;color:grey"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'previous' %}"><i class="fa fa-step-backward" style="font-size:48px;color:grey"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'play' %}"><i class="fa fa-play" style="font-size:54px;color:black"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'pause' %}"><i class="fa fa-pause" style="font-size:54px;color:black"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'next' %}"><i class="fa fa-step-forward" style="font-size:48px;color:grey"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{% url 'fastforward' %}"><i class="fa fa-fast-forward" style="font-size:48px;color:grey"></i> </a>
+
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                
+                                <a href="{% url 'volUP' %}"><i class="fa fa-volume-up"" style="font-size:48px;color:black"></i> </a>
+                                
+                            </div>
+                            <div> &nbsp; </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                
+            <!-- ============================================================== -->
+            <!-- End Container fluid  -->
+            <!-- ============================================================== -->
+
+            <footer class="footer">
+                © 2017 RDJ MP3
+            </footer>
+
+
+    </div>
+
+    <script src="{% static 'assets/plugins/jquery/jquery.min.js' %}"></script>
+    <!-- Bootstrap tether Core JavaScript -->
+    <script src="{% static 'assets/plugins/bootstrap/js/tether.min.js' %}"></script>
+    <script src="{% static 'assets/plugins/bootstrap/js/bootstrap.min.js' %}"></script>
+    <!--Wave Effects -->
+    <script src="{% static 'js/waves.js' %}"></script>
+    <!--Custom JavaScript -->
+    <script src="{% static 'js/custom.min.js' %}"></script>
+    <!-- jQuery file upload -->
+    <script src="{% static 'assets/plugins/dropify/dist/js/dropify.min.js' %}"></script>
+    <script>
+    $(document).ready(function() {
+        // Basic
+        $('.dropify').dropify();
+
+        // Translated
+        $('.dropify-fr').dropify({
+            messages: {
+                default: 'Glissez-déposez un fichier ici ou cliquez',
+                replace: 'Glissez-déposez un fichier ou cliquez pour remplacer',
+                remove: 'Supprimer',
+                error: 'Désolé, le fichier trop volumineux'
+            }
+        });
+
+        // Used events
+        var drEvent = $('#input-file-events').dropify();
+
+        drEvent.on('dropify.beforeClear', function(event, element) {
+            return confirm("Do you really want to delete \"" + element.file.name + "\" ?");
+        });
+
+        drEvent.on('dropify.afterClear', function(event, element) {
+            alert('File deleted');
+        });
+
+        drEvent.on('dropify.errors', function(event, element) {
+            console.log('Has Errors');
+        });
+
+        var drDestroy = $('#input-file-to-destroy').dropify();
+        drDestroy = drDestroy.data('dropify')
+        $('#toggleDropify').on('click', function(e) {
+            e.preventDefault();
+            if (drDestroy.isDropified()) {
+                drDestroy.destroy();
+            } else {
+                drDestroy.init();
+            }
+        })
+    });
+    </script>
+</body>
+
+</html>
