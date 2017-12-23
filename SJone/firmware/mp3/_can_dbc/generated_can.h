@@ -1,4 +1,4 @@
-/// DBC file: /home/jp/Desktop/RJD-MP3/SJone/firmware/lib/_can_dbc/243.dbc    Self node: 'DBG'  (ALL = 0)
+/// DBC file: /home/jpan127/Desktop/RJD-MP3/SJone/firmware/lib/_can_dbc/243.dbc    Self node: 'DBG'  (ALL = 0)
 /// This file can be included by a source file, for example: #include "generated.h"
 #ifndef __GENEARTED_DBC_PARSER
 #define __GENERATED_DBC_PARSER

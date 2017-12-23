@@ -67,37 +67,37 @@ static inline void handle_eint_list(uint32_t *isr_bits_ptr, volatile uint32_t *i
     };
 }
 
-/// Actual ISR Handler (mapped to startup file's interrupt vector function name)
-#ifdef __cplusplus
-extern "C" {
-#endif
-void EINT3_IRQHandler(void)
-{
-    /* Read all the ports' rising and falling isr status */
-    uint32_t p0_rising  = LPC_GPIOINT->IO0IntStatR;
-    uint32_t p0_falling = LPC_GPIOINT->IO0IntStatF;
-    uint32_t p2_rising  = LPC_GPIOINT->IO2IntStatR;
-    uint32_t p2_falling = LPC_GPIOINT->IO2IntStatF;
+// /// Actual ISR Handler (mapped to startup file's interrupt vector function name)
+// #ifdef __cplusplus
+// extern "C" {
+// #endif
+// void EINT3_IRQHandler(void)
+// {
+//     /* Read all the ports' rising and falling isr status */
+//     uint32_t p0_rising  = LPC_GPIOINT->IO0IntStatR;
+//     uint32_t p0_falling = LPC_GPIOINT->IO0IntStatF;
+//     uint32_t p2_rising  = LPC_GPIOINT->IO2IntStatR;
+//     uint32_t p2_falling = LPC_GPIOINT->IO2IntStatF;
 
-    /* Go through each list to handle the ISR.
-     * This will clear the interrupt by writing either to IO0IntClr or IO2IntClr
-     */
-    handle_eint_list(&p0_rising,  &(LPC_GPIOINT->IO0IntClr), gp_port0_rising_list);
-    handle_eint_list(&p0_falling, &(LPC_GPIOINT->IO0IntClr), gp_port0_falling_list);
-    handle_eint_list(&p2_rising,  &(LPC_GPIOINT->IO2IntClr), gp_port2_rising_list);
-    handle_eint_list(&p2_falling, &(LPC_GPIOINT->IO2IntClr), gp_port2_falling_list);
+//     /* Go through each list to handle the ISR.
+//      * This will clear the interrupt by writing either to IO0IntClr or IO2IntClr
+//      */
+//     handle_eint_list(&p0_rising,  &(LPC_GPIOINT->IO0IntClr), gp_port0_rising_list);
+//     handle_eint_list(&p0_falling, &(LPC_GPIOINT->IO0IntClr), gp_port0_falling_list);
+//     handle_eint_list(&p2_rising,  &(LPC_GPIOINT->IO2IntClr), gp_port2_rising_list);
+//     handle_eint_list(&p2_falling, &(LPC_GPIOINT->IO2IntClr), gp_port2_falling_list);
 
-    /* In case interrupt handler not attached correctly, clear all interrupts here */
-    if (p0_rising || p0_falling) {
-        LPC_GPIOINT->IO0IntClr = 0xFFFFFFFF;
-    }
-    if (p2_rising || p2_falling) {
-        LPC_GPIOINT->IO2IntClr = 0xFFFFFFFF;
-    }
-}
-#ifdef __cplusplus
-}
-#endif
+//     /* In case interrupt handler not attached correctly, clear all interrupts here */
+//     if (p0_rising || p0_falling) {
+//         LPC_GPIOINT->IO0IntClr = 0xFFFFFFFF;
+//     }
+//     if (p2_rising || p2_falling) {
+//         LPC_GPIOINT->IO2IntClr = 0xFFFFFFFF;
+//     }
+// }
+// #ifdef __cplusplus
+// }
+// #endif
 
 
 
