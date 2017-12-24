@@ -65,7 +65,7 @@ extern "C"
                 LPC_GPIOINT->IO2IntClr  |= (1 << i);
                 LPC_GPIO2->FIOCLR       |= (1 << i);
                 // Save gpio number
-                if (debounce_button(num))
+                if (debounce_button(i))
                 {
                     num = i;
                     break;
@@ -85,7 +85,7 @@ extern "C"
     }
 }
 
-static void Init_ButtonTask(void)
+void Init_ButtonTask(void)
 {
     // Create semaphores and start them taken
     for (int i=0; i<5; i++)
@@ -126,10 +126,8 @@ static void Init_ButtonTask(void)
 
 void ButtonTask(void *p)
 {
-    // Initialize task
-    Init_ButtonTask();
-
     uint8_t triggered_button = INVALID;
+    uint16_t counter = 0;
 
     // Main loop
     while (1)
@@ -137,23 +135,22 @@ void ButtonTask(void *p)
         // Receive the number of the button that triggered the ISR
         if (xQueueReceive(button_queue, &triggered_button, portMAX_DELAY))
         {
-            switch (triggered_button)
+            taskENTER_CRITICAL();
             {
-                // Play / Pause
-                case BUTTON0_PIN: xSemaphoreGive(ButtonSemaphores[0]); break;
-                // Next Song
-                case BUTTON1_PIN: xSemaphoreGive(ButtonSemaphores[1]); break;
-                // Volume?
-                case BUTTON2_PIN: xSemaphoreGive(ButtonSemaphores[2]); break;
-                // Fast Forward / Normal
-                case BUTTON3_PIN: xSemaphoreGive(ButtonSemaphores[3]); break;
-
-                case BUTTON4_PIN: xSemaphoreGive(ButtonSemaphores[4]); break;
-
-                case BUTTON5_PIN: xSemaphoreGive(ButtonSemaphores[5]); break;
-
-                default:          printf("%i\n", triggered_button);    break;
+                switch (triggered_button)
+                {
+                    case BUTTON0_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_PLAYPAUSE]);   break;
+                    case BUTTON1_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_STOP]);        break;
+                    case BUTTON2_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_NEXT]);        break;
+                    case BUTTON3_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_VOL_UP]);      break;
+                    case BUTTON4_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_VOL_DOWN]);    break;
+                    case BUTTON5_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_FF]);          break;
+                    default: 
+                        LOG_ERROR("[ButtonTask] Received impossible trigger button: %i\n", triggered_button);
+                        break;
+                }
             }
+            taskEXIT_CRITICAL();
         }
     }
 }

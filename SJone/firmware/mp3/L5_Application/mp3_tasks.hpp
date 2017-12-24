@@ -1,14 +1,35 @@
 #pragma once
-#include <stdarg.h>
 #include "common.hpp"
 #include "vs1053b.hpp"
 
+/*///////////////////////////////////////////////////
+ * File dependency structure:                       *
+ *                                                  *
+ *      msg_protocol        utilities               *
+ *              \            /                      *
+ *                  common                          *
+ *                  /    \                          *
+ *           TxTask        mp3_struct               *
+ *           RxTask                 \               *
+ *                                     DecoderTask  *
+ *                                     LCDTask      *
+ *                                                  *
+ *////////////////////////////////////////////////////
 
-extern SemaphoreHandle_t ButtonSemaphores[5];
+// @description : Initializes ButtonTask
+// 1. Initializes semaphores and queues
+// 2. Initializes GPIOs and interrupts
+void Init_ButtonTask(void);
 
+// @description : Task for responding to GPIO interrupts from external buttons
+// @priority    : PRIORITY_HIGH
 void ButtonTask(void *p);
 
-void LCDTask(void *p);
+// @description : Initializes DecoderTask
+// 1. Initializes SPI 0
+// 2. Initializes the decoder
+// 3. Initializes the tracklist
+void Init_DecoderTask(void);
 
 // @description : Task for communicating with the VS1053b device
 // @priority    : PRIORITY_HIGH / PRIORITY_MED?
@@ -35,3 +56,5 @@ void RxTask(void *p);
 //                in an undesired state.  Periodically checks once per second.
 // @priority    : PRIORITY_HIGH
 void WatchdogTask(void *p);
+
+void LCDTask(void *p);

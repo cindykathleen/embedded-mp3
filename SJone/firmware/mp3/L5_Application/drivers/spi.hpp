@@ -5,7 +5,6 @@
 #include <string.h>
 #include <LPC17xx.h>
 #include "singleton_template.hpp"
-#include "utilities.hpp"
 #include "gpio_output.hpp"
 
 // Pins for other SPI

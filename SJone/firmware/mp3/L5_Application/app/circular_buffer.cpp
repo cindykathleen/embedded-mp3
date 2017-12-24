@@ -29,7 +29,7 @@ CircularBuffer::~CircularBuffer()
 void CircularBuffer::InsertBack(char *element)
 {
     Node *new_node = new Node;
-    memcpy(new_node->element, element, MAX_NAME_LENGTH);
+    memcpy(new_node->element, element, MAX_TRACK_BUFLEN);
 
     // Empty list
     if (BufferSize == 0)

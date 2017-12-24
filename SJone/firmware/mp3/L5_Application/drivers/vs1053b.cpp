@@ -7,7 +7,8 @@
 #include "spi.hpp"
 #include "ssp0.h"
 
-#define SPI     (Spi0::getInstance())
+#define SPI              (Spi0::getInstance())
+#define MAX_DREQ_TIMEOUT (100000)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //

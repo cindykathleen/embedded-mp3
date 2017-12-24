@@ -67,7 +67,7 @@ private:
     {
         struct node *next;
         struct node *prev;
-        char element[MAX_NAME_LENGTH];
+        char element[MAX_TRACK_BUFLEN];
     } Node;
 
     // The circular buffer is composed of a doubly linked list
