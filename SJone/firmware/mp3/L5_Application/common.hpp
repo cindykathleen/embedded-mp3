@@ -46,15 +46,25 @@ extern EventGroupHandle_t watchdog_event_group;
 // extern SemaphoreHandle_t PlaySem;
 
 // A semaphore for each button, to signal between tasks
-extern SemaphoreHandle_t ButtonSemaphores[5];
+// extern SemaphoreHandle_t ButtonSemaphores[5];
+extern QueueHandle_t ButtonQueue;
 
 // Enumerate each of the button semaphores for code clarity and explicit accessing
+// For screen playing
 enum
 {
-    BUTTON_SEM_PLAYPAUSE = 0,   // Button 0
-    BUTTON_SEM_STOP      = 1,   // Button 1
-    BUTTON_SEM_NEXT      = 2,   // Button 2
-    BUTTON_SEM_VOL_UP    = 3,   // Button 3
-    BUTTON_SEM_VOL_DOWN  = 4,   // Button 4
-    BUTTON_SEM_FF        = 5,   // Button 5
+    BUTTON_PLAYPAUSE   = 0,   // Button 0
+    BUTTON_STOP        = 1,   // Button 1
+    BUTTON_NEXT        = 2,   // Button 2
+    BUTTON_VOL_UP      = 3,   // Button 3
+    BUTTON_VOL_DOWN    = 4,   // Button 4
+    BUTTON_FF          = 5,   // Button 5
+};
+// For screen select
+enum
+{
+    BUTTON_SCROLL_DOWN = 0, // Button 0
+    BUTTON_SCROLL_UP   = 1, // Button 1
+    BUTTON_SELECT      = 2, // Button 2
+    BUTTON_PEEK        = 3, // Button 3, maybe not
 };

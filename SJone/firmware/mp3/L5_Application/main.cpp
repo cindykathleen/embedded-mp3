@@ -9,7 +9,7 @@ int main(void)
     Init_ButtonTask();
     Init_DecoderTask();
 
-    xTaskCreate(ButtonTask,   "ButtonTask",   1024,  NULL, PRIORITY_MEDIUM, NULL);
+    xTaskCreate(ButtonTask,   "ButtonTask",   1024,  NULL, PRIORITY_LOW,    NULL);
     xTaskCreate(DecoderTask,  "DecoderTask",  4096,  NULL, PRIORITY_MEDIUM, NULL);
     // xTaskCreate(WatchdogTask, "WatchdogTask", 256,  NULL, PRIORITY_HIGH,   NULL);
     // xTaskCreate(TxTask,       "TxTask",       1024, NULL, PRIORITY_MEDIUM, NULL);

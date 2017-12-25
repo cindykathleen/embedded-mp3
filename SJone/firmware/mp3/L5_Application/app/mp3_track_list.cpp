@@ -442,14 +442,18 @@ bool mp3_rewind_segments(uint32_t segments)
 
 void mp3_next(void)
 {
-    ++CurrentTrackNumber;
-    if (CurrentTrackNumber == TrackListSize) CurrentTrackNumber = 0;
+    if (++CurrentTrackNumber == TrackListSize)
+    {
+        CurrentTrackNumber = 0;
+    }
 }
 
 void mp3_prev(void)
 {
-    --CurrentTrackNumber;
-    if (CurrentTrackNumber < 0) CurrentTrackNumber = TrackListSize-1;
+    if (--CurrentTrackNumber < 0)
+    {
+        CurrentTrackNumber = TrackListSize - 1;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

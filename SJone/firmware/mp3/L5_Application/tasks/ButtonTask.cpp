@@ -6,15 +6,17 @@
 #define BUTTON3_PIN (3)
 #define BUTTON4_PIN (4)
 #define BUTTON5_PIN (5)
+#define NUM_BUTTONS (5)
 
 #define INVALID      (0xFF)
 #define MIN_TIME_GAP (200 / portTICK_PERIOD_MS)
 
 // Global semaphores to signal from ButtonTask to DecoderTask
-SemaphoreHandle_t ButtonSemaphores[5];
+// SemaphoreHandle_t ButtonSemaphores[5];
+QueueHandle_t ButtonQueue;
 
 // Static queue that sends from ISR to task
-static QueueHandle_t button_queue;
+static QueueHandle_t interrupt_queue;
 
 
 /**
@@ -77,7 +79,7 @@ extern "C"
         {        
             // Send to queue
             BaseType_t higher_priority_task_woken;
-            xQueueSendFromISR(button_queue, &num, &higher_priority_task_woken);
+            xQueueSendFromISR(interrupt_queue, &num, &higher_priority_task_woken);
 
             // ButtonTask should be highest priority task
             portYIELD_FROM_ISR(higher_priority_task_woken);
@@ -87,15 +89,16 @@ extern "C"
 
 void Init_ButtonTask(void)
 {
-    // Create semaphores and start them taken
-    for (int i=0; i<5; i++)
-    {
-        ButtonSemaphores[i] = xSemaphoreCreateBinary();
-        xSemaphoreTake(ButtonSemaphores[i], 0);
-    }
+    // // Create semaphores and start them taken
+    // for (int i=0; i<5; i++)
+    // {
+    //     ButtonSemaphores[i] = xSemaphoreCreateBinary();
+    //     xSemaphoreTake(ButtonSemaphores[i], 0);
+    // }
 
-    // Create queue
-    button_queue = xQueueCreate(5, sizeof(uint8_t));
+    // Create queues
+    interrupt_queue = xQueueCreate(5, sizeof(uint8_t));
+    ButtonQueue     = xQueueCreate(5, sizeof(uint8_t));
 
     // Setup GPIOs
     LPC_GPIO2->FIODIR &= ~(1 << BUTTON0_PIN);
@@ -127,30 +130,23 @@ void Init_ButtonTask(void)
 void ButtonTask(void *p)
 {
     uint8_t triggered_button = INVALID;
-    uint16_t counter = 0;
 
     // Main loop
     while (1)
     {
         // Receive the number of the button that triggered the ISR
-        if (xQueueReceive(button_queue, &triggered_button, portMAX_DELAY))
+        if (xQueueReceive(interrupt_queue, &triggered_button, portMAX_DELAY))
         {
-            taskENTER_CRITICAL();
+            // Sanity check
+            if (triggered_button < NUM_BUTTONS)
             {
-                switch (triggered_button)
-                {
-                    case BUTTON0_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_PLAYPAUSE]);   break;
-                    case BUTTON1_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_STOP]);        break;
-                    case BUTTON2_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_NEXT]);        break;
-                    case BUTTON3_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_VOL_UP]);      break;
-                    case BUTTON4_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_VOL_DOWN]);    break;
-                    case BUTTON5_PIN: xSemaphoreGive(ButtonSemaphores[BUTTON_SEM_FF]);          break;
-                    default: 
-                        LOG_ERROR("[ButtonTask] Received impossible trigger button: %i\n", triggered_button);
-                        break;
-                }
+                // xSemaphoreGive(ButtonSemaphores[triggered_button]);
+                xQueueSend(ButtonQueue, &triggered_button, portMAX_DELAY);
             }
-            taskEXIT_CRITICAL();
+            else
+            {
+                LOG_ERROR("[ButtonTask] Received impossible trigger button: %i\n", triggered_button);
+            }
         }
     }
 }

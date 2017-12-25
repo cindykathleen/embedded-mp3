@@ -45,7 +45,7 @@ struct
 typedef enum
 {
     SCREEN_SELECT,
-    SCREEN_DETAILS,
+    SCREEN_PLAYING,
 } screen_E;
 
 // All purpose buffer for DecoderTask, mainly used for an MP3 segment to send to the device
@@ -155,94 +155,156 @@ static void HandleStateLogic(void)
 
 static void print_screen(uint8_t track_num, screen_E screen)
 {
+    const uint8_t track_list_size = mp3_get_track_list_size();
     track_S *track = NULL;
 
-    if (SCREEN_SELECT == screen)
+    switch (screen)
     {
-        printf("-------------------------------------------\n");
+        case SCREEN_SELECT:
+            printf("-------------------------------------------\n");
+            for (int i=0; i<4; i++)
+            {
+                track = mp3_get_track_by_number(track_num);
+                if (!track)
+                {
+                    LOG_ERROR("Track #%d returned NULL!\n", track_num);
+                    return;
+                }
+                if (!track->short_name)
+                {
+                    LOG_ERROR("Track #%d short_name: %s returned NULL!\n", track_num, track->short_name);
+                    return;
+                }
+                printf("%d. %s\n", track_num, track->short_name);
 
-        const uint8_t track_list_size = mp3_get_track_list_size();
+                if (++track_num >= track_list_size)
+                {
+                    track_num = 0;
+                }
+            }
+            break;
 
-        for (int i=0; i<4; i++)
-        {
+        case SCREEN_PLAYING:
+            printf("-------------------------------------------\n");
             track = mp3_get_track_by_number(track_num);
-            if (!track)
-            {
-                LOG_ERROR("Track #%d returned NULL!\n", track_num);
-                return;
-            }
-            if (!track->short_name)
-            {
-                LOG_ERROR("Track #%d short_name: %s returned NULL!\n", track_num, track->short_name);
-                return;
-            }
-            printf("%d. %s\n", track_num, track->short_name);
+            printf("%s\n", track->title);
+            printf("%s\n", track->artist);
+            printf("%s\n", track->genre);
+            break;
 
-            if (++track_num >= track_list_size)
-            {
-                track_num = 0;
-            }
-        }
-    }
-    else if (SCREEN_DETAILS == screen)
-    {
-        printf("-------------------------------------------\n");
-
-        track = mp3_get_track_by_number(track_num);
-        printf("%s\n", track->title);
-        printf("%s\n", track->artist);
-        printf("%s\n", track->genre);
-    }
-    else
-    {
-        LOG_ERROR("[print_screen] Impossible screen selected: %d\n", screen);
+        default:
+            LOG_ERROR("[print_screen] Impossible screen selected: %d\n", screen);
+            break;
     }
 }
 
-// Check if any buttons are pressed, only one button can be registered at a time
-// Order of if-statements can specify priority of buttons
-// Each semaphore attemps to take, with no timeout, and first one to take will be serviced
 static void HandleButtonTriggers(void)
 {
-    if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_PLAYPAUSE], 0) )
-    {   
-        if      (mp3_status.next_state == IDLE || mp3_status.next_state == STOP) mp3_status.next_state = PLAY;
-        else if (mp3_status.next_state == PLAY)                                  mp3_status.next_state = STOP;
-    }
-    else if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_STOP], 0) )
-    {   
-        if (MP3Player.IsPlaying())
-        {
-            // Stop playback
-            MP3Player.CancelDecoding();
+    static screen_E screen = SCREEN_SELECT;
+    static const uint8_t track_list_size = mp3_get_track_list_size();
+    static int track_num = mp3_get_current_track_num();
 
-            if (mp3_is_file_open())
+    // Check if any buttons were pressed
+    uint8_t triggered_button = 0xFF;
+    xQueueReceive(ButtonQueue, &triggered_button, 0);
+
+    switch (screen)
+    {
+        case SCREEN_PLAYING:
+
+            switch (triggered_button)
             {
-                printf("Closing file...\n");
-                mp3_close_file();
+                // Button 0 : Play or Pause
+                case BUTTON_PLAYPAUSE:
+                    // if (mp3_status.next_state == IDLE || mp3_status.next_state == STOP)
+                    // {
+                    //     mp3_status.next_state = PLAY;
+                    // }
+                    // else if (mp3_status.next_state == PLAY)
+                    // {
+                    //     mp3_status.next_state = STOP;
+                    // }
+                    break;
+                // Button 1 : Stop
+                case BUTTON_STOP:
+                    // if (MP3Player.IsPlaying())
+                    // {
+                    //     // Stop playback
+                    //     MP3Player.CancelDecoding();
+
+                    //     if (mp3_is_file_open())
+                    //     {
+                    //         printf("Closing file...\n");
+                    //         mp3_close_file();
+                    //     }
+                    //     // printf("[MP3Task] No need to cancel, not currently playing.\n");
+                    //     mp3_status.next_state = PLAY;
+                    // }
+                    break;
+                // Button 2 : Go to next track
+                case BUTTON_NEXT:
+                    // mp3_next();
+                    // mp3_status.current_track_name = mp3_get_current_track_field(TRACK_FIELD_FNAME);
+                    // printf("Current Track: %s \n", mp3_status.current_track_name);
+                    break;
+                // Button 3 : Raise volume
+                case BUTTON_VOL_UP:
+                    // MP3Player.IncrementVolume();
+                    break;
+                // Button 4 : Decrease volume
+                case BUTTON_VOL_DOWN:
+                    screen = SCREEN_SELECT;
+                    print_screen(track_num, screen);
+                    // MP3Player.DecrementVolume();
+                    break;
+            #if 0
+                // Button 5 : Fast forward
+                case BUTTON_FF:
+                    MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
+                    // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+                    break;
+            #endif
             }
-            // printf("[MP3Task] No need to cancel, not currently playing.\n");
-            mp3_status.next_state = PLAY;
-        }
-    }
-    else if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_NEXT], 0) )
-    {   
-        mp3_next();
-        mp3_status.current_track_name = mp3_get_current_track_field(TRACK_FIELD_FNAME);
-        printf("Current Track: %s \n", mp3_status.current_track_name);
-    }
-    else if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_VOL_UP], 0) )
-    {   
-        MP3Player.IncrementVolume();
-    }
-    else if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_VOL_DOWN], 0) )
-    {   
-        MP3Player.DecrementVolume();
-    }
-    else if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_FF], 0) )
-    {   
-        MP3Player.SetFastForwardMode(!MP3Player.GetFastForwardMode());
-        // mp3_set_direction( (DIR_FORWARD == mp3_get_direction()) ? (DIR_BACKWARD) : (DIR_FORWARD) );
+            break;
+
+        case SCREEN_SELECT:
+
+            switch (triggered_button)
+            {
+                // Button 0 : Scroll down one song
+                case BUTTON_SCROLL_DOWN:
+                    if (++track_num >= track_list_size)
+                    {
+                        track_num = 0;
+                    }
+                    print_screen(track_num, screen);
+                    break;
+                // Button 1 : Scroll up one song
+                case BUTTON_SCROLL_UP:
+                    if (--track_num < 0)
+                    {
+                        track_num = track_list_size - 1;
+                    }
+                    print_screen(track_num, screen);    
+                    break;
+                // Button 2 : Select song and change screens
+                case BUTTON_SELECT:
+                    screen = SCREEN_PLAYING;
+                    print_screen(track_num, screen);
+                    break;
+            #if 0
+                case BUTTON_PEEK:
+                    break;
+            #endif
+                // Do nothing
+                default:
+                    break;
+            }
+            break;
+
+        default:
+            LOG_ERROR("[print_screen] Impossible screen selected: %d\n", screen);
+            break;
     }
 }
 
@@ -266,39 +328,18 @@ void DecoderTask(void *p)
     xSemaphoreTake(PlaySem, portMAX_DELAY);
     mp3_status.next_state = PLAY;
 */
-    screen_E screen = SCREEN_SELECT;
 
-    const uint8_t track_list_size = mp3_get_track_list_size();
-    uint8_t track_num = mp3_get_current_track_num();
-    print_screen(track_num, screen);
+    // Print first screen
+    print_screen(mp3_get_current_track_num(), SCREEN_SELECT);
 
     // Main loop
     while (1)
     {
-        // HandleButtonTriggers();
+        HandleButtonTriggers();
         // HandleStateLogic();
         // CheckRxQueue();
 
         // xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
-
-        if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_PLAYPAUSE], 0) )
-        {
-            if (++track_num >= track_list_size)
-            {
-                track_num = 0;
-            }
-            print_screen(track_num, screen);                
-        }
-
-        if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_STOP], 0) )
-        {
-            screen = (screen == SCREEN_SELECT) ? (SCREEN_DETAILS) : (SCREEN_SELECT);
-            print_screen(track_num, screen);
-        }
-
-        // if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_NEXT]     , 0) )  printf("Button 2 pressed!\n");
-        // if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_VOL_UP]   , 0) )  printf("Button 3 pressed!\n");
-        // if ( xSemaphoreTake(ButtonSemaphores[BUTTON_SEM_VOL_DOWN] , 0) )  printf("Button 4 pressed!\n");
 
         DELAY_MS(1);
     }
