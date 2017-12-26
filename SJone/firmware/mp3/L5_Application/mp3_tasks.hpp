@@ -32,8 +32,8 @@ void Init_ButtonTask(void);
 //                2. Receives the GPIO number over a queue from the interrupt
 //                3. Sends the same number over a queue to DecoderTask
 //                The point for a pass through between 2 queues is because the interrupt will trigger
-//                this low priority task, which will signal a medium priority task.  This way other tasks will never
-//                waste time on worrying about the GPIOs.
+//                this high priority task, which will signal a medium priority task.  This way other tasks will never
+//                waste time on worrying about the GPIOs, and this task will be serviced immediately.
 void ButtonTask(void *p);
 
 

@@ -19,24 +19,24 @@ typedef enum
 // Denotes the opcode for command packets
 typedef enum
 {
-    PACKET_OPCODE_NONE                = 0,
-    PACKET_OPCODE_SET_BASS            = 1,
-    PACKET_OPCODE_SET_TREBLE          = 2,
-    PACKET_OPCODE_SET_SAMPLE_RATE     = 3,
-    PACKET_OPCODE_SET_PLAY_CURRENT    = 4,
-    PACKET_OPCODE_SET_PLAY_NEXT       = 5,
-    PACKET_OPCODE_SET_PLAY_PREV       = 6,
-    PACKET_OPCODE_SET_STOP            = 7,
-    PACKET_OPCODE_SET_FAST_FORWARD    = 8,
-    PACKET_OPCODE_SET_REVERSE         = 9,
-    PACKET_OPCODE_SET_SHUFFLE         = 10,
-    PACKET_OPCODE_GET_STATUS          = 11,
-    PACKET_OPCODE_GET_SAMPLE_RATE     = 12,
-    PACKET_OPCODE_GET_DECODE_TIME     = 13,
-    PACKET_OPCODE_GET_HEADER_INFO     = 14,
-    PACKET_OPCODE_GET_BIT_RATE        = 15,
-    PACKET_OPCODE_SET_RESET           = 16,
-    PACKET_OPCODE_LAST_INVALID        = 17,
+    PACKET_OPCODE_NONE             = 0,
+    PACKET_OPCODE_SET_BASS         = 1,
+    PACKET_OPCODE_SET_TREBLE       = 2,
+    PACKET_OPCODE_SET_SAMPLE_RATE  = 3,
+    PACKET_OPCODE_SET_PLAY_CURRENT = 4,
+    PACKET_OPCODE_SET_PLAY_NEXT    = 5,
+    PACKET_OPCODE_SET_PLAY_PREV    = 6,
+    PACKET_OPCODE_SET_STOP         = 7,
+    PACKET_OPCODE_SET_FAST_FORWARD = 8,
+    PACKET_OPCODE_SET_REVERSE      = 9,
+    PACKET_OPCODE_SET_SHUFFLE      = 10,
+    PACKET_OPCODE_GET_STATUS       = 11,
+    PACKET_OPCODE_GET_SAMPLE_RATE  = 12,
+    PACKET_OPCODE_GET_DECODE_TIME  = 13,
+    PACKET_OPCODE_GET_HEADER_INFO  = 14,
+    PACKET_OPCODE_GET_BIT_RATE     = 15,
+    PACKET_OPCODE_SET_RESET        = 16,
+    PACKET_OPCODE_LAST_INVALID     = 17,
 } packet_opcode_E;
 
 // Denotes the current state of the parser
@@ -51,8 +51,8 @@ typedef enum
 // Diagnostic Packet structure
 typedef struct
 {
-    uint8_t length; // Size of payload in bytes
     uint8_t type;   // Type of packet
+    uint8_t length; // Size of payload in bytes
 
     uint8_t payload[MAX_PACKET_SIZE];
 
@@ -61,8 +61,8 @@ typedef struct
 // Command Packet structure
 typedef struct
 {
-    uint8_t type; // Size of payload in bytes
-    uint8_t opcode; // Type of packet
+    uint8_t type;   // Type of packet
+    uint8_t opcode; // Opcode of command
 
     union
     {
@@ -90,12 +90,12 @@ parser_status_E diagnostic_packet_parser(uint8_t byte, diagnostic_packet_S *pack
 void diagnostic_packet_to_array(uint8_t *array, diagnostic_packet_S *packet);
 
 // @description   : Printf-style printing a formatted string to the ESP32
+//                  1. log_to_server
+//                  2. log_vsprintf
+//                  3. create_diagnostic_packet
+//                  4. msg_enqueue_no_timeout
 // @param type    : The type of the packet
 // @param message : The string format 
-// 1. log_to_server
-// 2. log_vsprintf
-// 3. create_diagnostic_packet
-// 4. msg_enqueue_no_timeout
 void log_to_server(packet_type_E type, const char *message, ...);
 
 // @description : Converts packet_type_E into the string name for the enum

@@ -1,15 +1,20 @@
-// Needs to monitor the VS1053b and call a hardware reset of the VS1053b if stuck
 #include "mp3_tasks.hpp"
+// Standard libraries
 #include <stdio.h>
+// Framework libraries
 #include "stop_watch.hpp"
+
 
 EventGroupHandle_t WatchdogEventGroup;
 
-void WatchdogTask(void *p)
+void Init_WatchdogTask(void)
 {
     // Initialize event group
     WatchdogEventGroup = xEventGroupCreate();
+}
 
+void WatchdogTask(void *p)
+{
     MicroSecondStopWatch timer;
    
     // 10 second timeout

@@ -15,26 +15,25 @@
 
 int main(void)
 {
+    // All initialization functions
     Init_Uart();
     Init_ButtonTask();
     Init_DecoderTask();
     Init_TxTask();
     Init_RxTask();
 
-    CREATE_TASK_LOW(ButtonTask,  1024);
+    // Low priority tasks
 
-    CREATE_TASK_MED(DecoderTask, 4096);
-    CREATE_TASK_MED(TxTask,      1024);
-    CREATE_TASK_MED(RxTask,      1024);
+    // Medium priority tasks
+    CREATE_TASK_MED(DecoderTask     , 4096);    // Regular operation
+    CREATE_TASK_MED(TxTask          , 1024);    // Regular operation
+    // CREATE_TASK_MED(LCDTask         , 1024);    // Regular operation
 
-    // CREATE_TASK_HIGH(DMATask,    1024);
-
-    // xTaskCreate(ButtonTask,    "ButtonTask",    1024,   NULL,   PRIORITY_LOW,      NULL);
-    // xTaskCreate(DecoderTask,   "DecoderTask",   4096,   NULL,   PRIORITY_MEDIUM,   NULL);
-    // xTaskCreate(TxTask,        "TxTask",        1024,   NULL,   PRIORITY_MEDIUM,   NULL);
-    // xTaskCreate(RxTask,        "RxTask",        1024,   NULL,   PRIORITY_MEDIUM,   NULL);
-    // xTaskCreate(LCDTask,       "LCDTask",       2048,   NULL,   PRIORITY_HIGH,     NULL);
-    // xTaskCreate(WatchdogTask,  "WatchdogTask",  256,    NULL,   PRIORITY_HIGH,     NULL);
+    // High priority tasks
+    CREATE_TASK_HIGH(ButtonTask     , 1024);    // Serviced immediately from GPIO interrupt
+    CREATE_TASK_HIGH(RxTask         , 1024);    // Serviced immediately from UART interrupt
+    // CREATE_TASK_HIGH(DMATask,       1024);
+    // CREATE_TASK_HIGH(WatchdogTask,  1024);
 
 #if CPP_SCHEDULER
 

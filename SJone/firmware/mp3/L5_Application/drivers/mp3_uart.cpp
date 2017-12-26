@@ -132,5 +132,5 @@ void Init_Uart(void)
 
 bool uart_tx_byte(uint8_t byte, TickType_t timeout_ms)
 {
-    return xQueueReceive(UartRxQueue, &byte, timeout_ms);
+    return (bool)xQueueReceive(UartRxQueue, &byte, timeout_ms);
 }

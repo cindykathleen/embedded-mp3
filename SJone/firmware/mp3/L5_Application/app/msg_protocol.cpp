@@ -1,18 +1,20 @@
 #include "msg_protocol.hpp"
+// Standard libraries
 #include <cstring>
 #include <cstdio>
+
 
 // Current state/status of the parser
 typedef enum
 {
-    LENGTH      = 0,
-    OPCODE      = 1,
-    PAYLOAD     = 2,
-    COMMAND1    = 3,
-    COMMAND2    = 4,
+    TYPE     = 0,
+    OPCODE   = 1,
+    PAYLOAD  = 2,
+    COMMAND1 = 3,
+    COMMAND2 = 4,
 } parser_state_E;
 
-
+#if 0
 // @description : Converts an enum to a string
 // @param state : The enum to be converted
 // @returns     : A const char string literal
@@ -20,7 +22,7 @@ static const char* parser_state_enum_to_string(parser_state_E state)
 {
     static const char* names[] = 
     {
-        [LENGTH]   = "LENGTH",
+        [TYPE]     = "TYPE",
         [OPCODE]   = "OPCODE",
         [PAYLOAD]  = "PAYLOAD",
         [COMMAND1] = "COMMAND1",
@@ -32,34 +34,35 @@ static const char* parser_state_enum_to_string(parser_state_E state)
 
 static void msg_enqueue_no_timeout(diagnostic_packet_S *packet)
 {
-    xQueueSend(MessageTxQueue, packet, portMAX_DELAY);
+    xQueueSend(MessageTxQueue, packet, MAX_DELAY);
 }
+#endif
 
 static void log_vsnprintf(packet_type_E type, const char *message, va_list arg_list)
 {
     // Buffer for post-formatted message
     char buffer[MAX_PACKET_SIZE + 2] = { 0 };
-    diagnostic_packet_S *packet = NULL;
 
     // Print warning if larger than the max packet size
     if (strlen(message) > MAX_PACKET_SIZE + 2)
     {
-        printf("[msg_protocol.cpp:msg_protocol_vsprintf] Message over max buffer size.\n");
+        printf("[log_vsnprintf] Message over max buffer size.\n");
     }
 
     // Prints formatted message to buffer with null-termination
     vsnprintf(buffer+2, sizeof(diagnostic_packet_S), message, arg_list);
-    buffer[0] = strlen(buffer+2);   // packet.length
-    buffer[1] = (uint8_t)type;      // pakcet.type
+    buffer[0] = (uint8_t)type;
+    buffer[1] = strlen(buffer) - 2;
 
-    // Convert buffer to diagnostic packet
-    packet = (diagnostic_packet_S *)buffer;
-
-    // // Send to TX queue
-    // msg_enqueue_no_timeout(packet);
-
+#if MP3_TESTING
     // For testing, print to terminal
     printf("[%s] %s", packet_type_enum_to_string(type), buffer+2);
+#else
+    // Convert buffer to diagnostic packet
+    diagnostic_packet_S *packet = (diagnostic_packet_S *)(&buffer);
+    // Send to TX queue
+    xQueueSend(MessageTxQueue, packet, MAX_DELAY);
+#endif
 }
 
 void log_to_server(packet_type_E type, const char *message, ...)
@@ -72,11 +75,11 @@ void log_to_server(packet_type_E type, const char *message, ...)
 
 parser_status_E command_packet_parser(uint8_t byte, command_packet_S *packet)
 {
-    static parser_state_E state = LENGTH;
+    static parser_state_E state = TYPE;
 
     switch (state)
     {
-        case LENGTH:
+        case TYPE:
             packet->type = byte;
             state = OPCODE;
             return PARSER_IN_PROGRESS;
@@ -90,11 +93,11 @@ parser_status_E command_packet_parser(uint8_t byte, command_packet_S *packet)
             return PARSER_IN_PROGRESS;
         case COMMAND2:
             packet->command.bytes[1] = byte;
-            state = LENGTH;
+            state = TYPE;
             return PARSER_COMPLETE;
         default:
-            printf("[command_packet_parser] Should never reach this state : %s!\n", parser_state_enum_to_string(state));
-            state = LENGTH;
+            printf("[command_packet_parser] Reached impossible state: %d!\n", state);
+            state = TYPE;
             return PARSER_ERROR;
     }
 }
