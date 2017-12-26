@@ -70,8 +70,23 @@ void Init_RxTask(void);
 void RxTask(void *p);
 
 
+// @description : Initializes DMATask
+//                1. Creates DMAQueue
+void Init_DMATask(void);
+
+// @description : Task for transferring a song from ESP32 to the SD card
+//                1. Blocks until receives file size from RXTask, which only sends when receiving a DMA opcode
+//                2. Suspends scheduler to turn off context switching
+//                3. Reads the name of the song over uart
+//                4. Create a new file with the name of the song
+//                5. Write segments to the file at a time until there is no more
+//                6. Unsuspend scheduler and block again
+void DMATask(void *p);
+
+
 // @description : This task monitors responses from other tasks to ensure none of them are stuck
 //                in an undesired state.  Periodically checks once per second.
 void WatchdogTask(void *p);
+
 
 void LCDTask(void *p);

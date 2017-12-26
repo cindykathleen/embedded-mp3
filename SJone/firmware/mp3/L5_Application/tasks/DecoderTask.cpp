@@ -4,6 +4,7 @@
 #include "ssp0.h"
 // Project libraries
 #include "mp3_track_list.hpp"
+#include "vs1053b.hpp"
 
 
 // Enum for which is the next state to handle

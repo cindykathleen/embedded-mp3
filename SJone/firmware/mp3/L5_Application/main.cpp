@@ -27,6 +27,8 @@ int main(void)
     CREATE_TASK_MED(TxTask,      1024);
     CREATE_TASK_MED(RxTask,      1024);
 
+    // CREATE_TASK_HIGH(DMATask,    1024);
+
     // xTaskCreate(ButtonTask,    "ButtonTask",    1024,   NULL,   PRIORITY_LOW,      NULL);
     // xTaskCreate(DecoderTask,   "DecoderTask",   4096,   NULL,   PRIORITY_MEDIUM,   NULL);
     // xTaskCreate(TxTask,        "TxTask",        1024,   NULL,   PRIORITY_MEDIUM,   NULL);

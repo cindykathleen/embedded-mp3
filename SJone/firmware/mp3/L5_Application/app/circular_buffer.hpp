@@ -36,7 +36,7 @@ public:
     char* PopBack();
 
     // @description   : Tries to find an element to pop from the list matching the input
-    // @element       : The element to search for
+    // @param element : The element to search for
     // @returns       : The value of the element popped, or NULL
     char* PopByName(char* element);
 
