@@ -1,5 +1,7 @@
 #pragma once
+// Project libraries
 #include "common.hpp"
+
 
 // Make size of diagnostic packet payload
 #define MAX_PACKET_SIZE (128)

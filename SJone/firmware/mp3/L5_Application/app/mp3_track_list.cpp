@@ -9,6 +9,7 @@
 #include "genre_lut.hpp"
 
 
+// Size of track list to malloc, maximum number of tracks it can handle
 #define MAX_TRACK_LIST_SIZE (20)
 
 #if 0 // Currently unused

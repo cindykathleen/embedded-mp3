@@ -14,18 +14,22 @@
 #include "utilities.hpp"
 
 
+#define MP3_TESTING 1
+
 // Helper macros for size comparison or related
 #define MAX(a, b)   ((a > b) ? (a) : (b))
 #define MIN(a, b)   ((a < b) ? (a) : (b))
 
-// Helper macro for delaying milliseconds
+// Helper macro for tick to ms conversions
 #define DELAY_MS(x) (vTaskDelay(x / portTICK_PERIOD_MS))
+#define TICK_MS(x)  (x / portTICK_PERIOD_MS)
+#define MAX_DELAY   (portMAX_DELAY)
 
 // Buffer max limits
 #define MAX_TRACK_BUFLEN     (32)
 #define MP3_SEGMENT_SIZE     (1024)
 
-// Individual bits of watchdog_event_group, mapping to each task that is monitored
+// Individual bits of WatchdogEventGroup, mapping to each task that is monitored
 #define WATCHDOG_DECODER_BIT (1 << 0)
 #define WATCHDOG_RX_BIT      (1 << 1)
 #define WATCHDOG_TX_BIT      (1 << 2)
@@ -40,16 +44,18 @@
 extern QueueHandle_t MessageRxQueue;
 extern QueueHandle_t MessageTxQueue;
 
-// Global event group for WatchdogTask to monitor the statuses of all other tasks
-extern EventGroupHandle_t watchdog_event_group;
+// Queues for transmitting / receiving between the UART FIFOs
+extern QueueHandle_t UartRxQueue;
+extern QueueHandle_t UartTxQueue;
 
-// extern SemaphoreHandle_t PlaySem;
+// Global event group for WatchdogTask to monitor the statuses of all other tasks
+extern EventGroupHandle_t WatchdogEventGroup;
 
 // A semaphore for each button, to signal between tasks
 // extern SemaphoreHandle_t ButtonSemaphores[5];
 extern QueueHandle_t ButtonQueue;
 
-// Enumerate each of the button semaphores for code clarity and explicit accessing
+// TODO : Enumerate each of the button semaphores for code clarity and explicit accessing
 // For screen playing
 enum
 {

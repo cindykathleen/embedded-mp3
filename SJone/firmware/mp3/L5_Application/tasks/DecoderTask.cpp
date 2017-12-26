@@ -6,22 +6,7 @@
 #include "mp3_track_list.hpp"
 
 
-// Initialize MP3 player with the pin numbers
-static const vs1053b_gpio_init_t gpio_init = {
-    .port_reset = GPIO_PORT0,
-    .port_dreq  = GPIO_PORT0,
-    .port_xcs   = GPIO_PORT0,
-    .port_xdcs  = GPIO_PORT0,
-    .pin_reset  = 0,
-    .pin_dreq   = 1,
-    .pin_xcs    = 29,
-    .pin_xdcs   = 30,
-};
-
-VS1053b MP3Player(gpio_init);
-
-// SemaphoreHandle_t PlaySem;
-
+// Enum for which is the next state to handle
 typedef enum
 {
     IDLE,
@@ -42,115 +27,119 @@ struct
     char *next_track_name       = NULL;     // Name of track queued up next to play
 } mp3_status;
 
+// Enum to specify which screen is currently being displayed
 typedef enum
 {
     SCREEN_SELECT,
     SCREEN_PLAYING,
 } screen_E;
 
+// Initialize MP3 player with the pin numbers
+static const vs1053b_gpio_init_t gpio_init = {
+    .port_reset = GPIO_PORT0,
+    .port_dreq  = GPIO_PORT0,
+    .port_xcs   = GPIO_PORT0,
+    .port_xdcs  = GPIO_PORT0,
+    .pin_reset  = 0,
+    .pin_dreq   = 1,
+    .pin_xcs    = 29,
+    .pin_xdcs   = 30,
+};
+
+// MP3 player
+static VS1053b MP3Player(gpio_init);
+
 // All purpose buffer for DecoderTask, mainly used for an MP3 segment to send to the device
 static uint8_t Buffer[MP3_SEGMENT_SIZE] = { 0 };
 
 // MP3 state machine
-static void HandleStateLogic(void)
+static void RunStateMachine(void)
 {
-//     // Status variables that remain
-//     static uint32_t current_segment_size = 0;
-//     static bool last_segment 		     = false;
-//     static vs1053b_transfer_status_E transfer_status;
+    // Status variables
+    static uint32_t current_segment_size = 0;           // Size of segment read in this loop iteration
+    static bool last_segment = false;                   // If size of segment less than expected, then it is the last segment or EOF
+    static vs1053b_transfer_status_E transfer_status;   // Status of transferring segment to decoder
 
-//     switch (Status.next_state)
-//     {
-//         case IDLE:
-//             // Make sure file is not open, for next time transitioning to PLAY state
-//             if (mp3_is_file_open())
-//             {
-//                 printf("Closing file...\n");
-//                 mp3_close_file();
-//             }
-//             break;
+    switch (mp3_status.next_state)
+    {
+        case IDLE:
+            // Make sure file is not open, for next time transitioning to PLAY state
+            mp3_close_file();
+            break;
 
-//         case PLAY:
-//             // Not currently playing, set up playback
-//             if (!MP3Player.IsPlaying())
-//             {
-//                 // Reset values to default
-//                 last_segment = false;
-//                 // Open mp3 file
-//                 // if (!mp3_open_file(mp3_get_current_track()))
-//                 // {
-//                 //     Status.next_state = IDLE;
-//                 //     break;
-//                 // }
-//             }
+        case PLAY:
+            // Not currently playing, set up playback
+            if (!mp3_is_file_open() || !MP3Player.IsPlaying())
+            {
+                // Reset value
+                last_segment = false;
+                // Open mp3 file
+                mp3_status.current_track_name = mp3_get_current_track()->full_name;
+                if (!mp3_open_file(mp3_status.current_track_name))
+                {
+                    mp3_status.next_state = IDLE;
+                    break;
+                }
+            }
 
-//             // // If in rewind mode, rewind, and continue
-//             // if (DIR_BACKWARD == mp3_get_direction())
-//             // {
-//             //     if (!mp3_rewind_segments(3))
-//             //     {
-//             //         mp3_close_file();
-//             //         Status.next_state = IDLE;
-//             //         break;
-//             //     }
-//             //     else
-//             //     {
-//             //         // No need to read segment, or play segment, when rewinding
-//             //         break;
-//             //     }
-//             // }
+            // If in rewind mode, rewind, and continue (break switch)
+            if (DIR_BACKWARD == mp3_get_status_direction())
+            {
+                // 3 is chosen arbitrarily, rewinds 3 x segment size = 3KB at a time
+                if (!mp3_rewind_segments(3))
+                {
+                    // Function above returns false if seeking failed, so close file just to be safe
+                    mp3_close_file();
+                    mp3_status.next_state = IDLE;
+                }
+            }
+            // If in forward mode, play next segment
+            else
+            {
+                // Read a segment at a time before sending to device
+                mp3_read_segment(Buffer, MP3_SEGMENT_SIZE, &current_segment_size);
 
-//             // Read a segment at a time before sending to device
-//             mp3_read_segment(Buffer, MP3_SEGMENT_SIZE, &current_segment_size);
+                // Set flag if last segment
+                last_segment = (current_segment_size < MP3_SEGMENT_SIZE);
 
-//             // Set flag if last segment
-//             last_segment = (current_segment_size < MP3_SEGMENT_SIZE);
+                // Send segment to device
+                transfer_status = MP3Player.PlaySegment(Buffer, current_segment_size, last_segment);
+                // LOG_INFO("[RunStateMachine] Played segment %lu with %lu bytes.\n", segment_counter, current_segment_size);
+                if (TRANSFER_FAILED == transfer_status)
+                {
+                    LOG_ERROR("[RunStateMachine] Segment transfer failed. Stopping playback.\n");
+                    mp3_status.next_state = IDLE;
+                }
 
-//             // Send segment to device
-//             transfer_status = MP3Player.PlaySegment((uint8_t*)Buffer, current_segment_size, last_segment);
+                // Clean up if last segment
+                if (last_segment) 
+                {
+                    LOG_STATUS("[RunStateMachine] Last segment, mp3 file closing...\n");
+                    mp3_close_file();
+                    // Automatically switch to next file
+                    mp3_next();
+                    mp3_status.current_track_name = mp3_get_current_track()->full_name;
+                    LOG_INFO("[RunStateMachine] Current Track: %s \n", mp3_status.current_track_name);
+                }
+            }
+            break;
 
-//             // printf("[MP3Task] Played segment %lu with %lu bytes.\n", segment_counter, current_segment_size);
+        case PAUSE:
+            // PAUSE is like IDLE, except does not close the file
+            break;
 
-//             if (TRANSFER_FAILED == transfer_status)
-//             {
-//                 printf("[MP3Task] Segment transfer failed. Stopping playback.\n");
-//                 Status.next_state = IDLE;
-//             }
-
-//             // Clean up if last segment
-//             if (last_segment) 
-//             {
-//                 printf("[MP3Task] Last segment, mp3 file closing...\n");
-//                 mp3_close_file();
-//                 mp3_next();
-//                 // Status.curr_track = mp3_get_current_track();
-//                 printf("Current Track: %s \n", Status.curr_track.short_name);
-//             }
-//             break;
-
-//         case PAUSE:
-//             break;
-
-//         case STOP:
-//             // If stop requested, is currently playing, and not recently requested
-//             if (MP3Player.IsPlaying())
-//             {
-//                 // Stop playback
-//                 MP3Player.CancelDecoding();
-
-//                 if (mp3_is_file_open())
-//                 {
-//                     printf("Closing file...\n");
-//                     mp3_close_file();
-//                 }
-//                 // printf("[MP3Task] No need to cancel, not currently playing.\n");
-//                 Status.next_state = IDLE;
-//             }
-
-//             // // Block and go back to LCD screen
-//             // xSemaphoreTake(PlaySem, portMAX_DELAY);
-//             break;
-//     }
+        case STOP:
+            // If stop requested and is currently playing
+            if (MP3Player.IsPlaying())
+            {
+                // Stop playback
+                MP3Player.CancelDecoding();
+                // Close file
+                mp3_close_file();
+            }
+            mp3_status.next_state = IDLE;
+            break;
+    }
 }
 
 static void print_screen(uint8_t track_num, screen_E screen)
@@ -216,37 +205,64 @@ static void HandleButtonTriggers(void)
             {
                 // Button 0 : Play or Pause
                 case BUTTON_PLAYPAUSE:
-                    // if (mp3_status.next_state == IDLE || mp3_status.next_state == STOP)
-                    // {
-                    //     mp3_status.next_state = PLAY;
-                    // }
-                    // else if (mp3_status.next_state == PLAY)
-                    // {
-                    //     mp3_status.next_state = STOP;
-                    // }
+                    switch (mp3_status.next_state)
+                    {
+                        case IDLE:  mp3_status.next_state = PLAY;  break;
+                        case PLAY:  mp3_status.next_state = PAUSE; break;
+                        case PAUSE: mp3_status.next_state = PLAY;  break;
+                        case STOP:  mp3_status.next_state = PLAY;  break;
+                        default: 
+                            LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
+                            mp3_status.next_state = IDLE;
+                            break;
+                    }
                     break;
+
                 // Button 1 : Stop
                 case BUTTON_STOP:
-                    // if (MP3Player.IsPlaying())
-                    // {
-                    //     // Stop playback
-                    //     MP3Player.CancelDecoding();
+                    // If device is in play mode, stop it and close file
+                    if (MP3Player.IsPlaying())
+                    {
+                        // Stop playback
+                        MP3Player.CancelDecoding();
+                        mp3_close_file();
+                    }
 
-                    //     if (mp3_is_file_open())
-                    //     {
-                    //         printf("Closing file...\n");
-                    //         mp3_close_file();
-                    //     }
-                    //     // printf("[MP3Task] No need to cancel, not currently playing.\n");
-                    //     mp3_status.next_state = PLAY;
-                    // }
+                    switch (mp3_status.next_state)
+                    {
+                        case IDLE:  mp3_status.next_state = IDLE;  break;
+                        case PLAY:  mp3_status.next_state = STOP;  break;
+                        case PAUSE: mp3_status.next_state = STOP;  break;
+                        case STOP:  mp3_status.next_state = IDLE;  break;
+                        default: 
+                            LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
+                            mp3_status.next_state = IDLE;
+                            break;
+                    }
                     break;
+
                 // Button 2 : Go to next track
                 case BUTTON_NEXT:
-                    // mp3_next();
-                    // mp3_status.current_track_name = mp3_get_current_track_field(TRACK_FIELD_FNAME);
-                    // printf("Current Track: %s \n", mp3_status.current_track_name);
+                    // First close song if open
+                    if (mp3_is_file_open()) mp3_close_file();
+                    // Go to next track
+                    mp3_next();
+                    mp3_status.current_track_name = mp3_get_current_track_field(TRACK_FIELD_FNAME);
+                    LOG_INFO("Current Track: %s \n", mp3_status.current_track_name);
+
+                    switch (mp3_status.next_state)
+                    {
+                        case IDLE:  mp3_status.next_state = IDLE;  break;
+                        case PLAY:  mp3_status.next_state = PLAY;  break;
+                        case PAUSE: mp3_status.next_state = PLAY;  break;
+                        case STOP:  mp3_status.next_state = IDLE;  break;
+                        default: 
+                            LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
+                            mp3_status.next_state = IDLE;
+                            break;
+                    }
                     break;
+
                 // Button 3 : Raise volume
                 case BUTTON_VOL_UP:
                     // MP3Player.IncrementVolume();
@@ -322,24 +338,21 @@ void Init_DecoderTask(void)
 
 void DecoderTask(void *p)
 {
-/*
-    // Don't start until LCD has selected a song
-    PlaySem = xSemaphoreCreateBinary();
-    xSemaphoreTake(PlaySem, portMAX_DELAY);
-    mp3_status.next_state = PLAY;
-*/
-
     // Print first screen
-    print_screen(mp3_get_current_track_num(), SCREEN_SELECT);
+    print_screen(0, SCREEN_SELECT);
 
     // Main loop
     while (1)
     {
+        // 1. Check for button triggers
         HandleButtonTriggers();
-        // HandleStateLogic();
+
+        // 2. Execute the next state
+        RunStateMachine();
+
         // CheckRxQueue();
 
-        // xEventGroupSetBits(watchdog_event_group, WATCHDOG_DECODER_BIT);
+        // xEventGroupSetBits(WatchdogEventGroup, WATCHDOG_DECODER_BIT);
 
         DELAY_MS(1);
     }

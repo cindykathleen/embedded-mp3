@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include "stop_watch.hpp"
 
-EventGroupHandle_t watchdog_event_group;
+EventGroupHandle_t WatchdogEventGroup;
 
 void WatchdogTask(void *p)
 {
     // Initialize event group
-    watchdog_event_group = xEventGroupCreate();
+    WatchdogEventGroup = xEventGroupCreate();
 
     MicroSecondStopWatch timer;
    
@@ -22,7 +22,7 @@ void WatchdogTask(void *p)
         // Get time before xEventGroupWaitBits
         float start_time = (float)timer.getElapsedTime() / 1000000;
 
-        EventBits_t bits = xEventGroupWaitBits(watchdog_event_group,
+        EventBits_t bits = xEventGroupWaitBits(WatchdogEventGroup,
                                                 all_bits,
                                                 pdTRUE,
                                                 pdTRUE,
