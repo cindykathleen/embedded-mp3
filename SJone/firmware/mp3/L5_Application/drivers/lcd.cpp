@@ -5,6 +5,7 @@
 #include <string.h>
 // Framework libraries
 #include "i2c2.hpp"
+#include "utilities.h"
 // Project libraries
 #include "lcd.hpp"
 
@@ -31,7 +32,7 @@
 // Static variables
 static const uint8_t row_offset[4] = { 0x00, 0x40, 0x14, 0x54 };
 // static const char *songStartLine   = "------------------|";
-static uint8_t  currentArrowPos    = 0;
+static lcd_row_E  current_row      = LCD_ROW0;
 // static uint32_t currentSongOffset  = 0;
 // static uint32_t currentSongIndex   = 0;
 // static uint32_t currentScreenIndex = 0;
@@ -62,20 +63,8 @@ void lcd_send_byte(uint8_t byte, uint8_t mode)
     lcd_transfer_byte(bytes, 4);
 }
 
-inline void lcd_clear_all_rows(void) 
+void lcd_clear_row(lcd_row_E row) 
 {
-    for (int i=0; i<4; i++)
-    {
-        lcd_clear_row(i);
-    }
-}
-
-void lcd_clear_row(uint8_t row) 
-{
-    // Don't do anything if incorrect row
-    // TODO : change to enum?
-    if (row >= 3) return;
-
     // Move cursor to row to be cleared
     lcd_set_cursor(1, row);
 
@@ -86,9 +75,17 @@ void lcd_clear_row(uint8_t row)
     DELAY_MS(50);
 }
 
-inline void lcd_set_cursor(uint8_t column, uint8_t row) 
+inline void lcd_clear_all_rows(void) 
 {
-    lcd_send_byte(LCD_SETDDRAMADDR | (column + row_offset[row]), LCD_MODE_COMMAND);
+    for (int i=0; i<LCD_NUM_ROWS; i++)
+    {
+        lcd_clear_row((lcd_row_E)i);
+    }
+}
+
+inline void lcd_set_cursor(uint8_t column, lcd_row_E row) 
+{
+    lcd_send_byte(LCD_SETDDRAMADDR | (column + row_offset[(uint8_t)row]), LCD_MODE_COMMAND);
 }
 
 inline void lcd_set_arrow_position(uint8_t pos) 
@@ -96,27 +93,53 @@ inline void lcd_set_arrow_position(uint8_t pos)
     lcd_send_byte(LCD_SETDDRAMADDR | row_offset[pos], LCD_MODE_COMMAND);
 }
 
+static inline void lcd_increment_row(void)
+{
+    switch (current_row)
+    {
+        case LCD_ROW0: current_row = LCD_ROW1; break;
+        case LCD_ROW1: current_row = LCD_ROW2; break;
+        case LCD_ROW2: current_row = LCD_ROW3; break;
+        case LCD_ROW3: current_row = LCD_ROW0; break;
+        default:                               break;
+    }
+}
+
+static inline void lcd_decrement_row(void)
+{
+    switch (current_row)
+    {
+        case LCD_ROW0: current_row = LCD_ROW3; break;
+        case LCD_ROW1: current_row = LCD_ROW0; break;
+        case LCD_ROW2: current_row = LCD_ROW1; break;
+        case LCD_ROW3: current_row = LCD_ROW2; break;
+        default:                               break;
+    }
+}
+
 void lcd_move_arrow(lcd_move_direction_E direction)
 {
     switch (direction)
     {
         case LCD_UP:
-            if (currentArrowPos < 3) 
+            // Can only go up if not already at the top
+            if (current_row != LCD_ROW3) 
             {
-                lcd_clear_arrow(currentArrowPos);
-                lcd_set_arrow_position(currentArrowPos + 1);
+                lcd_clear_arrow(current_row);
+                lcd_set_arrow_position((uint8_t)current_row + 1);
                 lcd_send_byte(ARROW_CHAR, LCD_MODE_DATA);
-                currentArrowPos++;
+                lcd_increment_row();
             }
             break;
 
         case LCD_DOWN:
-            if (currentArrowPos > 0)
+            // Can only go down if not already at the bottom
+            if (current_row != LCD_ROW0)
             {
-                lcd_clear_arrow(currentArrowPos);
-                lcd_set_arrow_position(currentArrowPos - 1);
+                lcd_clear_arrow(current_row);
+                lcd_set_arrow_position((uint8_t)current_row - 1);
                 lcd_send_byte(ARROW_CHAR, LCD_MODE_DATA);
-                currentArrowPos--;
+                lcd_decrement_row();
             }
             break;
     }
@@ -140,6 +163,9 @@ inline void lcd_set_home(void)
 
 inline void lcd_send_string(uint8_t *str, uint8_t size) 
 {
+    // Assert size is less than the width of the screen (20 - 1 for arrow)
+    size = MIN(19, size);
+
     for (uint8_t i=0; i<size; i++)
     {
         lcd_send_byte(str[i], LCD_MODE_DATA);
@@ -149,37 +175,42 @@ inline void lcd_send_string(uint8_t *str, uint8_t size)
 void lcd_init(void) 
 {
     // Random value to clear backback
-    uint8_t rd = 0x60;
-    I2C.readRegisters(LCD_ADDRESS, &rd, 1); 
-    DELAY_MS(100);
+    const uint8_t rd = 0x60;
+    I2C.readRegisters(LCD_ADDRESS, (uint8_t*)&rd, 1); 
+    delay_ms(100);
 
-    uint8_t bytes[2] = { 0x34, 0x30 };
-    lcd_transfer_byte(bytes, 2);
-    DELAY_MS(5);
+    const uint8_t bytes[2] = { 0x34, 0x30 };
+    lcd_transfer_byte((uint8_t*)bytes, 2);
+    delay_ms(5);
 
-    lcd_transfer_byte(bytes, 2);
-    DELAY_MS(5);
+    lcd_transfer_byte((uint8_t*)bytes, 2);
+    delay_ms(5);
 
-    lcd_transfer_byte(bytes, 2); 
-    DELAY_MS(5);
+    lcd_transfer_byte((uint8_t*)bytes, 2); 
+    delay_ms(5);
 
-    uint8_t init[14] = { 0x24, 0x20,
-                         0x24, 0x20,
-                         0x84, 0x80,
-                         0x04, 0x00,
-                         0xC4, 0xC0,
-                         0x04, 0x00,
-                         0x14, 0x10, };
-    lcd_transfer_byte(init, 14); 
-    DELAY_MS(2);
+    const uint8_t init[14] = { 0x24, 0x20,
+                               0x24, 0x20,
+                               0x84, 0x80,
+                               0x04, 0x00,
+                               0xC4, 0xC0,
+                               0x04, 0x00,
+                               0x14, 0x10 };
+    lcd_transfer_byte((uint8_t*)init, 14); 
+    delay_ms(2);
 
     // Turn on backlight (last 0x00)
     // TODO : double check this
-    uint8_t setup[6] = { 0x04, 0x00,
-                         0x64, 60,
-                         00,   0x08 };
-    lcd_transfer_byte(setup, 6); 
-    DELAY_MS(5);
+    const uint8_t setup[6] = { 0x04, 0x00,
+                               0x64, 0x60,
+                               0x00, 0x08 };
+    lcd_transfer_byte((uint8_t*)setup, 6); 
+    delay_ms(5);
 
     lcd_clear_screen();
+
+    delay_ms(100);
+    // Reset cursor, and initialize arrow
+    lcd_set_cursor(0, LCD_ROW0);
+    lcd_send_byte(ARROW_CHAR, LCD_MODE_DATA);
 }

@@ -6,156 +6,15 @@
 // Framework libraries
 #include "i2c2.hpp"
 // Project libraries
+#include "mp3_track_list.hpp"
 #include "lcd.hpp"
 
-// #define I2C                     (I2C2::getInstance())
 
-// #define LCD_ADDRESS             (0x4E)
+// Extern
+screen_E CurrentScreen;
+SemaphoreHandle_t ScreenMutex;
 
-// // LCD Commands
-// #define LCD_CLEARDISPLAY        (0x01)
-// #define LCD_RETURNHOME          (0x02)
-// #define LCD_ENTRYMODESET        (0x04)
-// #define LCD_DISPLAYCONTROL      (0x08)
-// #define LCD_SETDDRAMADDR        (0x80)
-
-// #define COMMAND                 (0x00)
-// #define DATA                    (0x01)
-
-// #define BLOCK_CHAR              (0xFF)
-// #define ARROW_CHAR              (0x7E)
-
-// // #define LCD_CURSORSHIFT         0x10
-// // #define LCD_FUNCTIONSET         0x20
-// // #define LCD_SETCGRAMADDR        0x40
-
-// // Flags for display entry mode
-// // #define LCD_ENTRYRIGHT          0x00
-// // #define LCD_ENTRYLEFT           0x02
-// // #define LCD_ENTRYSHIFTINCREMENT 0x01
-// // #define LCD_ENTRYSHIFTDECREMENT 0x00
-
-// // Flags for display on/off and cursor control
-// // #define LCD_DISPLAYON           0x04
-// // #define LCD_DISPLAYOFF          0x00
-// // #define LCD_CURSORON            0x02
-// // #define LCD_CURSOROFF           0x00
-// // #define LCD_BLINKON             0x01
-// // #define LCD_BLINKOFF            0x00
-
-// // Flags for display/cursor shift
-// // #define LCD_DISPLAYMOVE         0x08
-// // #define LCD_CURSORMOVE          0x00
-// // #define LCD_MOVERIGHT           0x04
-// // #define LCD_MOVELEFT            0x00
-
-// // Flags for function set
-// // #define LCD_8BITMODE            0x10
-// // #define LCD_4BITMODE            0x00
-// // #define LCD_2LINE               0x08
-// // #define LCD_1LINE               0x00
-// // #define LCD_5x10DOTS            0x04
-// // #define LCD_5x8DOTS             0x00
-
-// // #define FOUR_BITS               0x02
-
-// // #define MAX_SONG_LIST           10
-// // #define MAX_COL_LENGTH          20
-
-// typedef enum { LCD_UP, LCD_DOWN } lcd_move_direction_E;
-
-// static const uint8_t row_offset[4] = { 0x00, 0x40, 0x14, 0x54 };
-// static const char *songStartLine = "------------------|";
-
-
-// // static file_name_S **track_list;
-// // static mp3_header_S* headers;
-// // static uint8_t track_list_size = 0;
-
-// // static uint8_t currentArrowPos = 0;
-// // static uint32_t currentSongOffset = 0;
-// // static uint32_t currentSongIndex = 0;
-// // static uint32_t currentScreenIndex = 0;
-// // static uint32_t songTimeElapsed = 0;
-// // static bool songInterrupt = false;
-
-// static void lcd_select_row(uint32_t row);
-// static void lcd_move_line_up(void);
-// static void lcd_move_line_down(void);
-// static void printSongs(uint8_t startIndex);
-// static void lcd_clear_all_rows();
-// static void lcd_clear_row(uint8_t row);
-// static void lcd_set_cursor(uint8_t column, uint8_t row);
-// static void moveArrowDown();
-// static void moveArrowUp();
-// static void lcd_clear_arrow(uint8_t pos);
-// static void lcd_set_arrow_position(uint8_t pos);
-// static void lcd_clear_display();
-// static void setHome();
-// static void lcd_send_byte(char c, uint8_t mode = DATA);
-// static void sendString(char *str, uint32_t size);
-// static void lcd_transfer_byte(uint8_t * wdata, uint32_t wlength);
-// static void I2C_THIS_IS_TOTALLY_NOT_HARDCODED_MAGIC();
-// static void playSongScreenSetup(uint8_t rowSelected);
-// static void initSwitches();
-// static void display_screen();
-
-// #if 0
-// void lcd_select_row(uint32_t row) 
-// {
-//     lcd_clear_display();
-//     setHome();
-
-//     if (currentScreenIndex == 0) 
-//     {
-//         playSongScreenSetup(row);
-//         currentScreenIndex++;
-//     }
-// }
-
-// void lcd_move_line_up(void) 
-// {
-//     if (currentArrowPos == 0)
-//     {
-//         if (currentSongOffset > 0)
-//         {
-//             currentSongOffset--;
-//             lcd_clear_all_rows();
-//             printSongs(currentSongOffset);
-//         }
-//     } 
-//     else 
-//     {
-//         moveArrowUp();
-//     }
-
-//     if (currentSongIndex > 0)
-//     {
-//         currentSongIndex--;
-//     }
-// }
-
-// void lcd_move_line_down(void) 
-// {
-//     if (currentArrowPos == 3) {
-//         if ((currentSongOffset + 1) < (track_list_size-3)) {
-//             currentSongOffset++;
-//             lcd_clear_all_rows();
-//             printSongs(currentSongOffset);
-//         }
-//     } 
-//     else if ((currentSongOffset + 1) < (track_list_size-3)) {
-//         moveArrowDown();
-//     }
-
-//     if (currentSongIndex < track_list_size-1) {
-//         currentSongIndex++;
-//     }
-
-//     printf("%d %d %d\n", track_list_size, currentSongOffset, currentSongIndex);
-// }
-
-// void printSongs(uint8_t startIndex) 
+// static void printSongs(uint8_t startIndex) 
 // {
 //     uint8_t line = 0;
 //     for (int i = startIndex; i < (startIndex+4); ++i) {
@@ -171,190 +30,204 @@
 //         }
 //     }
 // }
-// #endif
 
-// static void lcd_transfer_byte(uint8_t *bytes, uint32_t size)
-// {
-//     I2C.writeRegisters(LCD_ADDRESS, bytes, size); 
-// }
+static void PrintScreen(uint8_t track_num, screen_E screen)
+{
+    const uint8_t track_list_size = mp3_get_track_list_size();
+    track_S *track = NULL;
 
-// static void lcd_send_byte(char c, uint8_t mode) 
-// {
-//     uint8_t upper = 0;
-//     uint8_t lower = 0;
-//     uint8_t bytes[4] = { 0 };
-    
-//     upper     = c & 0xF0;                    // get upper 4 bits of char
-//     upper    |= LCD_DISPLAYCONTROL | mode;   // backlight 0x8 | mode 0x1
-//     bytes[0]  = upper |  (LCD_ENTRYMODESET); // byte0 (enable 0x04)
-//     bytes[1]  = upper & ~(LCD_ENTRYMODESET); // byte1 inverse
+#if MP3_TESTING
+    printf("-------------------------------------------\n");
+#endif
 
-//     lower     = (c << 4);                    // get lower 4 bits of char
-//     lower    |= LCD_DISPLAYCONTROL | mode;   // backlight 0x8 | mode 0x1
-//     bytes[2]  = lower |  (LCD_ENTRYMODESET); // byte2 (enable 0x04)
-//     bytes[3]  = lower & ~(LCD_ENTRYMODESET); // byte3 inverse
-    
-//     lcd_transfer_byte(bytes, 4);
-// }
+    switch (screen)
+    {
+        case SCREEN_SELECT:
 
-// static void lcd_clear_all_rows() 
-// {
-//     for (int i=0; i<4; i++)
-//     {
-//         lcd_clear_row(i);
-//     }
-// }
+            for (int i=0; i<4; i++)
+            {
+                track = mp3_get_track_by_number(track_num);
+                if (!track)
+                {
+                    LOG_ERROR("Track #%d returned NULL!\n", track_num);
+                    return;
+                }
+                if (!track->short_name)
+                {
+                    LOG_ERROR("Track #%d short_name: %s returned NULL!\n", track_num, track->short_name);
+                    return;
+                }
 
-// static void lcd_clear_row(uint8_t row) 
-// {
-//     // Move cursor to row to be cleared
-//     lcd_set_cursor(1, row);
+#if MP3_TESTING
+                printf("%d. %s\n", track_num, track->short_name);
+#else
+                lcd_set_cursor(1, (lcd_row_E)i);
+                lcd_send_string((uint8_t *)track->short_name, MIN(19, strlen(track->short_name)));
+#endif
 
-//     // To clear each character, a space needs to be written to it
-//     const char *empty_row = "                   ";
-//     sendString(empty_row, strlen(empty_row));
+                if (++track_num >= track_list_size)
+                {
+                    track_num = 0;
+                }
+            }
+            break;
 
-//     DELAY_MS(50);
-// }
+        case SCREEN_PLAYING:
 
-// static void lcd_set_cursor(uint8_t column, uint8_t row) 
-// {
-//     lcd_send_byte(LCD_SETDDRAMADDR | (column + row_offset[row]), COMMAND);
-// }
+            // TODO : Check which way the rows are oriented
+            track = mp3_get_track_by_number(track_num);
 
-// static void lcd_set_arrow_position(uint8_t pos) 
-// {
-//     lcd_send_byte(LCD_SETDDRAMADDR | row_offset[pos], COMMAND);
-// }
+#if MP3_TESTING
+            printf("%s\n", track->title);
+            printf("%s\n", track->artist);
+            printf("%s\n", track->genre);
+#else
+            // Title
+            lcd_set_cursor(1, (lcd_row_E)0);
+            lcd_send_string((uint8_t *)track->title, MIN(19, strlen(track->title)));
+            // Artist
+            lcd_set_cursor(1, (lcd_row_E)1);
+            lcd_send_string((uint8_t *)track->artist, MIN(19, strlen(track->artist)));
+            // Genre
+            lcd_set_cursor(1, (lcd_row_E)2);
+            lcd_send_string((uint8_t *)track->genre, MIN(19, strlen(track->genre)));
+            // TODO : Make this into a state / mode display
+            lcd_clear_row(LCD_ROW3);
+#endif
 
-// static void lcd_move_arrow(lcd_move_direction_E direction)
-// {
-//     switch (direction)
-//     {
-//         case LCD_UP:
-//             if (currentArrowPos < 3) 
-//             {
-//                 lcd_clear_arrow(currentArrowPos);
-//                 lcd_set_arrow_position(currentArrowPos + 1);
-//                 lcd_send_byte(ARROW_CHAR);
-//                 currentArrowPos++;
-//             }
-//             break;
+            break;
 
-//         case LCD_DOWN:
-//             if (currentArrowPos > 0)
-//             {
-//                 lcd_clear_arrow(currentArrowPos);
-//                 lcd_set_arrow_position(currentArrowPos - 1);
-//                 lcd_send_byte(ARROW_CHAR);
-//                 currentArrowPos--;
-//             }
-//             break;
-//     }
-// }
+        default:
+            LOG_ERROR("[print_screen] Impossible screen selected: %d\n", screen);
+            break;
+    }
+}
 
-// static inline void lcd_clear_arrow(uint8_t pos) 
-// {
-//     lcd_set_arrow_position(pos);
-//     lcd_send_byte(' ');
-// }
+static void HandleButtonTriggers(void)
+{
+    // Size of track list
+    static const uint8_t track_list_size = mp3_get_track_list_size();
 
-// static inline void lcd_clear_display() 
-// {
-//     lcd_send_byte(LCD_CLEARDISPLAY, COMMAND); // 0x01 | mode2
-// }
+    // Start off with song 0
+    static int track_num = mp3_get_current_track_num();
 
-// // void setHome() 
-// // {
-// //     lcd_send_byte(LCD_RETURNHOME, COMMAND); // 0x02 | mode2
-// // }
+    // Check if any buttons were pressed
+    uint8_t triggered_button = 0xFF;
+    xQueueReceive(LCDButtonQueue, &triggered_button, 0);
 
-// // void sendString(char *str, uint32_t size) 
-// // {
-// //     for (uint32_t i = 0; i < size; i++) {
-// //         lcd_send_byte(str[i]);
-// //     }
-// // }
+    switch (CurrentScreen)
+    {
+        case SCREEN_PLAYING:
 
+            switch (triggered_button)
+            {
+                // Change track details
+                case BUTTON_NEXT:
 
+                    // Block until DecoderTask changes the track + gives semaphore
+                    xSemaphoreTake(NextSemaphore, MAX_DELAY);
 
-// // void playSongScreenSetup(uint8_t rowSelected) 
-// // {
-// //     char *name = headers[currentSongIndex].file_name.short_name;
-// //     uint8_t length = strlen(name);
-// //     sendString(name, length);
+                    // Get new track number, could have changed before after semaphore taken
+                    track_num = mp3_get_current_track_num();
 
-// //     // Artist Name
-// //     lcd_set_cursor(0,1);
-// //     char *artist = headers[currentSongIndex].artist;
-// //     length = strlen(artist);
-// //     sendString(artist, length);
+                    // Print new track's details
+                    PrintScreen(track_num, CurrentScreen);
+                    break;
 
-// //     // Genre
-// //     lcd_set_cursor(0,2);
-// //     char *genre = headers[currentSongIndex].genre;
-// //     length = strlen(genre);
-// //     sendString(genre, length);
+                // Go back to SCREEN_SELECT
+                case BUTTON_BACK:
 
-// //     // Set Song Timeline - bottom row
-// //     lcd_set_cursor(0,3);
-// //     lcd_send_byte(BLOCK_CHAR);
-// //     uint32_t lineLen = strlen(songStartLine);
-// //     sendString((char *)songStartLine,lineLen);
-// // }
+                    // Change screen
+                    // TODO : Evaluate if mutex is even needed, and if variable is even global
+                    xSemaphoreTake(ScreenMutex, MAX_DELAY);
+                    {
+                        CurrentScreen = SCREEN_SELECT;
+                    }
+                    xSemaphoreGive(ScreenMutex);
+
+                    // Get new track number
+                    track_num = mp3_get_current_track_num();
+
+                    // Print new screen
+                    PrintScreen(track_num, CurrentScreen);
+                    break;
+
+                // Should never reach this state
+                default:
+                    LOG_ERROR("[LCDTask::HandleButtonTriggers] Received impossible button in SCREEN_PLAYING: %d\n", triggered_button);
+                    break;
+            }
+            break;
+
+        case SCREEN_SELECT:
+
+            switch (triggered_button)
+            {
+                // Button 0 : Scroll down one song
+                case BUTTON_SCROLL_DOWN:
+
+                    if (++track_num >= track_list_size)
+                    {
+                        track_num = 0;
+                    }
+                    PrintScreen(track_num, CurrentScreen);
+                    break;
+
+                // Button 1 : Scroll up one song
+                case BUTTON_SCROLL_UP:
+
+                    if (--track_num < 0)
+                    {
+                        track_num = track_list_size - 1;
+                    }
+                    PrintScreen(track_num, CurrentScreen);    
+                    break;
+
+                // Button 2 : Select song and change screens
+                case BUTTON_SELECT:
+
+                    // Change screen
+                    xSemaphoreTake(ScreenMutex, MAX_DELAY);
+                    {
+                        CurrentScreen = SCREEN_PLAYING;
+                    }
+                    xSemaphoreGive(ScreenMutex);
+                    PrintScreen(track_num, CurrentScreen);
+                    break;
+
+                // Should never reach this state
+                default:
+                    LOG_ERROR("[LCDTask::HandleButtonTriggers] Received impossible button in SCREEN_SELECT: %d\n", triggered_button);
+                    break;
+            }
+            break;
+
+        // Should never reach this state
+        default:
+            LOG_ERROR("[LCDTask::HandleButtonTriggers] Impossible screen selected: %d\n", CurrentScreen);
+            break;
+    }
+}
 
 void Init_LCDTask(void) 
 {
+    // Initialize LCD peripheral
     lcd_init();
+
+    // Set default screen and initialize mutex
+    CurrentScreen = SCREEN_SELECT;
+    ScreenMutex   = xSemaphoreCreateMutex();
+
+    // Print first screen of first 4 songs
+    PrintScreen(0, SCREEN_SELECT);
 }
 
-// // void LCDTask(void *p)
-// // {
-// //     printf("LCD set up.\n");
-
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 29);
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 28);
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 23);
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 22);
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 20);
-// //     LPC_GPIO1->FIODIR   &= ~(0x1 << 19);
-
-// //     track_list_init();
-// //     track_list = track_list_get_track_list();
-// //     track_list_size = track_list_get_size();
-// //     headers = track_list_get_headers();
-
-// //     DELAY_MS(100);
-// //     lcd_set_cursor(0, 0);
-// //     lcd_send_byte(ARROW_CHAR);
-
-// //     printSongs(currentSongOffset);
-    
-// //     printf("LCD set up.\n");
-
-// //     while (1)
-// //     {
-// //         if (LPC_GPIO1->FIOPIN & (1 << 22))
-// //         {
-// //             DELAY_MS(100);
-// //             while (LPC_GPIO1->FIOPIN & (1 << 22));
-// //             if (currentScreenIndex == 0) lcd_move_line_down();
-// //         }
-// //         else if (LPC_GPIO1->FIOPIN & (1 << 23))
-// //         {
-// //             DELAY_MS(100);
-// //             while (LPC_GPIO1->FIOPIN & (1 << 23));
-// //             if (currentScreenIndex == 0) lcd_move_line_up();
-// //         }
-// //         else if (LPC_GPIO1->FIOPIN & (1 << 28))
-// //         {
-// //             DELAY_MS(100);
-// //             while (LPC_GPIO1->FIOPIN & (1 << 28));
-// //             if (currentScreenIndex == 0) lcd_select_row(currentSongIndex);
-// //             track_list_set_current_track(currentSongIndex);
-// //             // Unblock DecoderTask
-// //             printf("Unblocking decodertask...\n");
-// //             xSemaphoreGive(PlaySem);
-// //         }
-// //     }
-// // }
+void LCDTask(void *p)
+{
+    // Main loop
+    while (1)
+    {
+        // TODO : Move more code from functions into task
+        HandleButtonTriggers();
+    }
+}

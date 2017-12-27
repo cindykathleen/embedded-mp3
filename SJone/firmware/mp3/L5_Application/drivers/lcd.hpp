@@ -10,8 +10,18 @@
 typedef enum 
 { 
     LCD_UP, 
-    LCD_DOWN 
+    LCD_DOWN,
 } lcd_move_direction_E;
+
+// Enum for current row position
+typedef enum
+{
+    LCD_ROW0     = 0,
+    LCD_ROW1     = 1,
+    LCD_ROW2     = 2,
+    LCD_ROW3     = 3,
+    LCD_NUM_ROWS = 4,
+} lcd_row_E;
 
 // @description     : Fills a single character on the LCD screen
 // @param byte      : Byte to be sent
@@ -28,12 +38,12 @@ inline void lcd_clear_all_rows(void);
 
 // @description     : Clears a single row
 // @param row       : The row to be cleared (0-3)
-void lcd_clear_row(uint8_t row);
+void lcd_clear_row(lcd_row_E row);
 
 // @description     : Moves the cursor to a (row, column) position
 // @param column    : The column to move to
 // @param row       : The row to move to
-inline void lcd_set_cursor(uint8_t column, uint8_t row);
+inline void lcd_set_cursor(uint8_t column, lcd_row_E row);
 
 // @description     : Moves arrow symbol to a specific position
 // @param pos       : The position to move to

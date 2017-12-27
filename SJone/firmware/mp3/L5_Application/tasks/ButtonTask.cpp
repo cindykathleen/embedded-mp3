@@ -5,18 +5,17 @@
 #define BUTTON2_PIN (2)
 #define BUTTON3_PIN (3)
 #define BUTTON4_PIN (4)
-#define BUTTON5_PIN (5)
 #define NUM_BUTTONS (5)
 
 #define INVALID      (0xFF)
 #define MIN_TIME_GAP (200 / portTICK_PERIOD_MS)
 
-// Global semaphores to signal from ButtonTask to DecoderTask
-// SemaphoreHandle_t ButtonSemaphores[5];
-QueueHandle_t ButtonQueue;
+// Global queues to signal from ButtonTask to DecoderTask and LCDTask
+QueueHandle_t DecoderButtonQueue;
+QueueHandle_t LCDButtonQueue;
 
 // Static queue that sends from ISR to task
-static QueueHandle_t interrupt_queue;
+static QueueHandle_t InterruptQueue;
 
 
 /**
@@ -79,7 +78,7 @@ extern "C"
         {        
             // Send to queue
             BaseType_t higher_priority_task_woken;
-            xQueueSendFromISR(interrupt_queue, &num, &higher_priority_task_woken);
+            xQueueSendFromISR(InterruptQueue, &num, &higher_priority_task_woken);
 
             // ButtonTask should be highest priority task
             portYIELD_FROM_ISR(higher_priority_task_woken);
@@ -97,8 +96,9 @@ void Init_ButtonTask(void)
     // }
 
     // Create queues
-    interrupt_queue = xQueueCreate(5, sizeof(uint8_t));
-    ButtonQueue     = xQueueCreate(5, sizeof(uint8_t));
+    InterruptQueue     = xQueueCreate(5, sizeof(uint8_t));
+    DecoderButtonQueue = xQueueCreate(5, sizeof(uint8_t));
+    LCDButtonQueue     = xQueueCreate(5, sizeof(uint8_t));
 
     // Setup GPIOs
     LPC_GPIO2->FIODIR &= ~(1 << BUTTON0_PIN);
@@ -106,7 +106,6 @@ void Init_ButtonTask(void)
     LPC_GPIO2->FIODIR &= ~(1 << BUTTON2_PIN);
     LPC_GPIO2->FIODIR &= ~(1 << BUTTON3_PIN);
     LPC_GPIO2->FIODIR &= ~(1 << BUTTON4_PIN);
-    LPC_GPIO2->FIODIR &= ~(1 << BUTTON5_PIN);
 
     // EINT3 : Disable interrupts, set interrupt settings and pins, re-enable interrupts
     NVIC_DisableIRQ(EINT3_IRQn);
@@ -120,7 +119,6 @@ void Init_ButtonTask(void)
     LPC_GPIOINT->IO2IntEnR |= (1 << BUTTON2_PIN);
     LPC_GPIOINT->IO2IntEnR |= (1 << BUTTON3_PIN);
     LPC_GPIOINT->IO2IntEnR |= (1 << BUTTON4_PIN);
-    LPC_GPIOINT->IO2IntEnR |= (1 << BUTTON5_PIN);
 
     NVIC_EnableIRQ(EINT3_IRQn);
 
@@ -135,13 +133,42 @@ void ButtonTask(void *p)
     while (1)
     {
         // Receive the number of the button that triggered the ISR
-        if (xQueueReceive(interrupt_queue, &triggered_button, portMAX_DELAY))
+        if (xQueueReceive(InterruptQueue, &triggered_button, MAX_DELAY))
         {
             // Sanity check
             if (triggered_button < NUM_BUTTONS)
             {
-                // xSemaphoreGive(ButtonSemaphores[triggered_button]);
-                xQueueSend(ButtonQueue, &triggered_button, portMAX_DELAY);
+                switch (CurrentScreen)
+                {
+                    // All buttons are forwarded to LCDTask
+                    case SCREEN_SELECT:
+
+                        xQueueSend(LCDButtonQueue, &triggered_button, MAX_DELAY);
+                        break;
+
+                    // Buttons 0-3 go to DecoderTask, Button 4 goes to LCDTask, Button 2 goes to both (BUTTON_NEXT)
+                    case SCREEN_PLAYING:
+
+                        switch (triggered_button)
+                        {
+                            case BUTTON_NEXT:
+                                xQueueSend(DecoderButtonQueue, &triggered_button, MAX_DELAY);
+                                xQueueSend(LCDButtonQueue,     &triggered_button, MAX_DELAY);
+                                break;
+                            case BUTTON_BACK:
+                                xQueueSend(LCDButtonQueue,     &triggered_button, MAX_DELAY);
+                                break;
+                            case BUTTON_PLAYPAUSE: // No break
+                            case BUTTON_STOP:      // No break
+                            default:
+                                xQueueSend(DecoderButtonQueue, &triggered_button, MAX_DELAY);
+                                break;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
             }
             else
             {
