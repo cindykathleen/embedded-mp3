@@ -66,7 +66,7 @@ static uint8_t CurrentTrackNumber = 0;          // Current track number in the t
 static void mp3_id3_parser(uint8_t *buffer, uint32_t size, track_S *track)
 {
     // Minimum 10 bytes to parse header
-    assert(size > 10);
+    // assert(size > 10);
 
     // Start off by setting each field to unknown, definitely under max buflen
     const char *unknown = "Unknown";
@@ -425,6 +425,10 @@ bool mp3_read_segment(uint8_t *buffer, uint32_t segment_size, uint32_t *current_
     else
     {
         ++current_song.segment;
+        if (current_song.segment % 1000 == 0)
+        {
+            LOG_INFO("Segment %d\n", current_song.segment);
+        }
         return true;
     }
 }

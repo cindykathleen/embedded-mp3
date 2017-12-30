@@ -1,7 +1,6 @@
 #include "vs1053b.hpp"
 // Standard libraries
 #include <cstring>
-#include <cmath>
 #include <stdio.h>
 // Framework libraries
 #include "ssp0.h"
@@ -12,11 +11,17 @@
 #define MAX_DREQ_TIMEOUT_MS (TICK_MS(50))
 #define MAX_CS_TIMEOUT      (TICK_MS(50))
 
+enum
+{
+    OPCODE_READ  = 0x03,
+    OPCODE_WRITE = 0x02
+};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VS1053b::VS1053b(vs1053b_gpio_init_t init) :    
+VS1053b::VS1053b(vs1053b_gpio_init_S init) :    
                                             DREQ(init.port_dreq   , init.pin_dreq),
                                             RESET(init.port_reset , init.pin_reset, true),
                                             XCS(init.port_xcs     , init.pin_xcs  , true),
@@ -80,7 +85,7 @@ void VS1053b::SystemInit(SemaphoreHandle_t dreq_sem)
         UpdateRemoteRegister(WRAMADDR);        
         UpdateRemoteRegister(WRAM);        
         // Wait a little to make sure it was written       
-        delay_ms(100);   
+        TICK_MS(100);   
         // Software reset to boot into MP3 mode        
         SoftwareReset();       
     }      
@@ -199,7 +204,7 @@ bool VS1053b::HardwareReset()
     SetReset(false);
 
     // Wait 1 ms
-    delay_ms(1);
+    TICK_MS(1);
 
     // Pull reset line back high
     SetReset(true);
@@ -233,6 +238,7 @@ void VS1053b::PrintDebugInformation()
     if (!UpdateRegisterMap())
     {
         printf("[VS1053b::PrintDebugInformation] Failed to update register map.\n");
+        return;
     }
     UpdateHeaderInformation();
 
@@ -242,14 +248,14 @@ void VS1053b::PrintDebugInformation()
     printf("------------------------------------------------------\n");
     printf("Header Information\n");
     printf("------------------------------------------------------\n");
-    printf("stream_valid    : %d\n", Header.stream_valid);
-    printf("id              : %d\n", Header.id);
-    printf("layer           : %d\n", Header.layer);
-    printf("protect_bit     : %d\n", Header.protect_bit);
+    printf("stream_valid    : %d\n",  Header.stream_valid);
+    printf("id              : %d\n",  Header.id);
+    printf("layer           : %d\n",  Header.layer);
+    printf("protect_bit     : %d\n",  Header.protect_bit);
     printf("bit_rate        : %lu\n", Header.bit_rate);
-    printf("sample_rate     : %d\n", Header.sample_rate);
-    printf("pad_bit         : %d\n", Header.pad_bit);
-    printf("mode            : %d\n", Header.mode);
+    printf("sample_rate     : %d\n",  Header.sample_rate);
+    printf("pad_bit         : %d\n",  Header.pad_bit);
+    printf("mode            : %d\n",  Header.mode);
     printf("------------------------------------------------------\n");
     printf("MODE            : %04X\n", RegisterMap[MODE].reg_value);
     printf("STATUS          : %04X\n", RegisterMap[STATUS].reg_value);
@@ -290,7 +296,7 @@ void VS1053b::CancelDecoding()
     Status.playing = false;
 }
 
-void VS1053b::SetEarSpeakerMode(ear_speaker_mode_t mode)
+void VS1053b::SetEarSpeakerMode(ear_speaker_mode_E mode)
 {
     UpdateLocalRegister(MODE);
 
@@ -326,14 +332,8 @@ void VS1053b::SetStreamMode(bool on)
 
     const uint16_t stream_bit = (1 << 6);
 
-    if (on)
-    {
-        RegisterMap[MODE].reg_value |= stream_bit;
-    }
-    else
-    {
-        RegisterMap[MODE].reg_value &= ~stream_bit;
-    }
+    if (on) RegisterMap[MODE].reg_value |=  stream_bit;
+    else    RegisterMap[MODE].reg_value &= ~stream_bit;
 
     UpdateRemoteRegister(MODE);
 }
@@ -344,14 +344,8 @@ void VS1053b::SetClockDivider(bool on)
 
     const uint16_t clock_range_bit = (1 << 15);
 
-    if (on)
-    {
-        RegisterMap[MODE].reg_value |= clock_range_bit;
-    }
-    else
-    {
-        RegisterMap[MODE].reg_value &= ~clock_range_bit;
-    }
+    if (on) RegisterMap[MODE].reg_value |=  clock_range_bit;
+    else    RegisterMap[MODE].reg_value &= ~clock_range_bit;
 
     UpdateRemoteRegister(MODE);
 }
@@ -361,7 +355,7 @@ void VS1053b::SetBaseEnhancement(uint8_t amplitude, uint8_t freq_limit)
     UpdateLocalRegister(STATUS);
 
     // Clamp to max
-    if (amplitude > 0xF)  amplitude  = 0xF;
+    if (amplitude  > 0xF) amplitude  = 0xF;
     if (freq_limit > 0xF) freq_limit = 0xF;
     
     const uint8_t bass_value = (amplitude << 4) | freq_limit;
@@ -376,7 +370,7 @@ void VS1053b::SetTrebleControl(uint8_t amplitude, uint8_t freq_limit)
     UpdateLocalRegister(STATUS);
 
     // Clamp to max
-    if (amplitude > 0xF)  amplitude  = 0xF;
+    if (amplitude  > 0xF) amplitude  = 0xF;
     if (freq_limit > 0xF) freq_limit = 0xF;
     
     const uint8_t treble_value = (amplitude << 4) | freq_limit;
@@ -386,10 +380,14 @@ void VS1053b::SetTrebleControl(uint8_t amplitude, uint8_t freq_limit)
     UpdateRemoteRegister(STATUS);
 }
 
-void VS1053b::SetVolume(uint8_t left_vol, uint8_t right_vol)
+void VS1053b::SetVolume(float percentage)
 {
-    uint16_t volume = (left_vol << 8) | right_vol;
-    RegisterMap[VOL].reg_value = volume;
+    // Limit to maximum 100%
+    percentage = MIN(1, percentage);
+
+    uint8_t volume = 0xFF * percentage;
+
+    RegisterMap[VOL].reg_value = (volume << 8) | volume;
 
     UpdateRemoteRegister(VOL);
 }
@@ -408,8 +406,6 @@ void VS1053b::IncrementVolume(float percentage)
     RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
 
     UpdateRemoteRegister(VOL);
-
-    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
 }
 
 void VS1053b::DecrementVolume(float percentage)
@@ -426,8 +422,6 @@ void VS1053b::DecrementVolume(float percentage)
     RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
 
     UpdateRemoteRegister(VOL);
-
-    printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
 }
 
 void VS1053b::SetLowPowerMode(bool on)
@@ -449,7 +443,7 @@ void VS1053b::SetLowPowerMode(bool on)
             SetEarSpeakerMode(EAR_SPEAKER_OFF);
 
             // Turn off analog drivers
-            SetVolume(0xFF, 0xFF);
+            SetVolume(1.0f);
         }
     }
     else
@@ -458,7 +452,7 @@ void VS1053b::SetLowPowerMode(bool on)
         if (Status.low_power_mode)
         {
             // Turn off analog drivers
-            SetVolume(0xFF, 0xFF);
+            SetVolume(1.0f);
 
             // Turn off ear speaker mode
             SetEarSpeakerMode(EAR_SPEAKER_OFF);
@@ -519,7 +513,7 @@ vs1053b_transfer_status_E VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool
         SendEndFillByte(2052);
 
         // Wait 50 ms buffer time between playbacks
-        delay_ms(50);
+        TICK_MS(50);
 
         // Update status flags
         Status.playing = false;
@@ -710,11 +704,6 @@ inline bool VS1053b::SetXDCS(bool value)
     }
 }
 
-inline bool VS1053b::GetXDCS()
-{
-    return XDCS.GetValue();
-}
-
 inline bool VS1053b::SetXCS(bool value)
 {
     if (!xSemaphoreTake(CSMutex, MAX_CS_TIMEOUT))
@@ -728,11 +717,6 @@ inline bool VS1053b::SetXCS(bool value)
         xSemaphoreGive(CSMutex);
         return true;
     }
-}
-
-inline bool VS1053b::GetXCS()
-{
-    return XCS.GetValue();
 }
 
 inline bool VS1053b::DeviceReady()
@@ -805,18 +789,6 @@ inline bool VS1053b::UpdateRemoteRegister(SCI_reg reg)
 {
     // Transfer local register value to remote
     return (RegisterMap[reg].can_write) ? (TransferSCICommand(reg)) : (false);
-}
-
-inline void VS1053b::ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
-{
-    if (bit_value)
-    {
-        RegisterMap[reg].reg_value |= (1 << bit);
-    }
-    else
-    {
-        RegisterMap[reg].reg_value &= ~(1 << bit);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -928,6 +900,9 @@ uint8_t VS1053b::GetEndFillByte()
     return half_word & 0xFF;
 }
 
+
+#if 0
+// Unecessary
 float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
 {
     UpdateLocalRegister(CLOCKF);
@@ -951,6 +926,7 @@ float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
 
     return ceil(microseconds_per_cycle * clock_cycles) + 1;
 }
+#endif
 
 bool VS1053b::TransferSCICommand(SCI_reg reg)
 {

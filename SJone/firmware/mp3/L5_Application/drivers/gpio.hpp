@@ -16,7 +16,7 @@ typedef enum
     OUTPUT
 } gpio_mode_t;
 
-// Forward declaration necessary for linkage
+// Forward declaration necessary for linkage (if C++)
 typedef LPC_GPIO_type LPC_GPIO_Typedef;
 
 // Gpio base class, don't use

@@ -1,6 +1,4 @@
 #pragma once
-// Framework libraries
-#include "stop_watch.hpp"
 // Project libraries
 #include "common.hpp"
 #include "gpio_input.hpp"
@@ -14,19 +12,13 @@ typedef enum
     TRANSFER_CANCELLED
 } vs1053b_transfer_status_E;
 
-typedef enum
-{
-    OPCODE_READ  = 0x03,
-    OPCODE_WRITE = 0x02
-} vs1053b_opcode_t;
-
 typedef enum 
 {
     EAR_SPEAKER_OFF,
     EAR_SPEAKER_MINIMAL,
     EAR_SPEAKER_NORMAL,
     EAR_SPEAKER_EXTREME
-} ear_speaker_mode_t;
+} ear_speaker_mode_E;
 
 typedef struct
 {
@@ -112,7 +104,7 @@ typedef struct
     uint8_t     pin_dreq;
     uint8_t     pin_xcs;
     uint8_t     pin_xdcs;
-} __attribute__((packed)) vs1053b_gpio_init_t;
+} __attribute__((packed)) vs1053b_gpio_init_S;
 
 typedef struct 
 {
@@ -133,20 +125,14 @@ public:
 
     // @description     : Constructor, initializes the device
     // @param init      : Port and pin number for all GPIOS necessary for device to function
-    VS1053b(vs1053b_gpio_init_t init);
+    VS1053b(vs1053b_gpio_init_S init);
 
     // @description     : Initializes the VS1053B system, all the pins, and the default states of the registers
     void SystemInit(SemaphoreHandle_t dreq_sem);
 
-    // @description     : Sends data to the device
-    // @param data      : The data byte to write
-    // @param size      : Size of array to transfer
-    // @returns         : Status after transfer
-    vs1053b_transfer_status_E TransferData(uint8_t *data, uint32_t size);
-
     // @description     : Perform a hardware reset
     // @returns         : True for success, false for unsuccessful (timeout)
-    bool  HardwareReset();
+    bool HardwareReset();
 
     // @description     : Perform a software reset
     // @returns         : True for success, false for unsuccessful (timeout)
@@ -163,7 +149,7 @@ public:
 
     // @description     : Sets the ear speaking procecssing mode
     // @param mode      : Either off, minimal, normal, or extreme
-    void SetEarSpeakerMode(ear_speaker_mode_t mode);
+    void SetEarSpeakerMode(ear_speaker_mode_E mode);
 
     // @description     : Sets the mode of streaming
     // @param on        : True for on, false for off
@@ -183,26 +169,21 @@ public:
     // @param freq_limit: The lower frequency
     void SetTrebleControl(uint8_t amplitude, uint8_t freq_limit);
 
+#if 0
     // @description       : Sets the sample rate register
     // @param sample_rate : The sample rate to set to, possible values range from 0 to 48k
     void SetSampleRate(uint16_t sample_rate);
+#endif
 
-    // @description     : Sets the volume register, left and right volumes can be different
-    // @param left_vol  : Volume of the left speaker
-    // @param right_vol : Volume of the right speaker
-    void SetVolume(uint8_t left_vol, uint8_t right_vol);
-
+    // @description      : Sets the volume register, left and right volumes can be different
+    // @param percentage : Percentage to set the volume to
+    void SetVolume(float percentage);
     void IncrementVolume(float percentage=0.05f);
     void DecrementVolume(float percentage=0.05f);
 
     // @description     : Turns on or off the lower power mode
     // @param on        : True for on, false for off
     void SetLowPowerMode(bool on);
-
-    // @description     : Starts playback mode by sending an mp3 file to the device
-    // @param mp3       : Array of mp3 file bytes
-    // @param size      : Size of the arrray of file
-    void PlayEntireSong(uint8_t *mp3, uint32_t size);
 
     // @description        : Plays a segment of a song
     // @param mp3          : Array of mp3 file bytes
@@ -211,23 +192,16 @@ public:
     // @returns            : Status of transfer
     vs1053b_transfer_status_E PlaySegment(uint8_t *mp3, uint32_t size, bool last_segment);
 
-    // @description     : Switches current playback to another mp3 file
-    // @param mp3       : Array of mp3 file bytes
-    // @param size      : Size of the arrray of file
-    void SwitchPlayback(uint8_t *mp3, uint32_t size);
-
     // @description     : Turns on or off the fast forward mode
     // @param on        : True for on, false for off
     void SetFastForwardMode(bool on);
-
-    // @description     : Turns on or off the rewind mode
-    // @param on        : True for on, false for off
-    void SetRewindMode(bool on);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                         GETTER FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // @description     : Status of fast forward mode
+    // @returns         : True for fast forwarding, false for normal speed
     bool GetFastForwardMode();
 
     // @description     : Get the current sample rate
@@ -242,9 +216,11 @@ public:
     // @returns         : The current decoding time in seconds
     uint16_t GetCurrentDecodedTime();
 
+#if 0
     // @description     : Reads the current playback position of the mp3 file
     // @returns         : Playback position in milliseconds
     uint32_t GetPlaybackPosition();
+#endif
 
     // @description     : Parses the header information of the current mp3 file
     // @returns         : Struct of the header information
@@ -254,6 +230,8 @@ public:
     // @returns         : The current bit rate
     uint32_t GetBitRate();
 
+    // @description     : Status of decoder, playing means it is expecting data
+    // @returns         : True for playing, false for not playing
     bool IsPlaying();
 
 private:
@@ -308,24 +286,18 @@ private:
 
     // @description     : Reads the DREQ pin
     // @returns         : Value of pin
-    inline bool GetDREQ();
-
-    // @description     : Reads possibility of new operation from DREQ pin
-    // @returns         : True for ready to go, false for wait
     inline bool DeviceReady();
 
     // @description     : Sets the RESET pin
     // @param value     : Value to set the pin to
     inline void SetReset(bool value);
 
-    // @description     : Pull XCS line to select or deselect the device
-    // @param on        : True for pull line low + select device, False for pull line high + deselect device
-    inline void SwitchChipSelect(bool on);
-
+#if 0
     // @description     : Checks if the supplied address is a valid address to access
     // @param address   : The address to check
     // @returns         : True for valid, false for invalid
     inline bool IsValidAddress(uint16_t address);
+#endif
 
     // @description     : Reads the register on the device and updates the RegisterMap
     // @param reg       : Enum of the register
@@ -346,6 +318,14 @@ private:
     //                                        PRIVATE FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // @description     : Sends data to the device
+    // @param data      : The data byte to write
+    // @param size      : Size of array to transfer
+    // @returns         : Status after transfer
+    vs1053b_transfer_status_E TransferData(uint8_t *data, uint32_t size);
+
+    // @description     : Waits for DREQ semaphore to be given, times out based on MAX_DREQ_TIMEOUT_MS
+    // @returns         : True for successful, false for unsuccessful    
     bool WaitForDREQ();
 
     // @description     : Read a register from RAM that is not a command register
@@ -376,14 +356,16 @@ private:
     // @description     : Updates the header struct with fresh information
     void UpdateHeaderInformation();
 
-    // @description         : Computes the microseconds needed to delay for a specified amount of clock cycles
-    // @param clock_cycles  : The number of cycles to apply to the calculation
-    // @param is_clockf     : True to show the register it is calculating for is CLOCKF, which requires a different calculation
-    //                        from the other registers since it is based off of XTALI instead of CLKI
+#if 0
+    // @description        : Computes the microseconds needed to delay for a specified amount of clock cycles
+    // @param clock_cycles : The number of cycles to apply to the calculation
+    // @param is_clockf    : True to show the register it is calculating for is CLOCKF, which requires a different calculation
+    //                       from the other registers since it is based off of XTALI instead of CLKI
     float ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf);
 
     // @description     : Reads the current status information from the device and updates the struct
     void UpdateStatusMap();
+#endif
 
     // @description     : Reads the value of each register and updates the register map
     // @returns         : True for successful, false for unsuccessful

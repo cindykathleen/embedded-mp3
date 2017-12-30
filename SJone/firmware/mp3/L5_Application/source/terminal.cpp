@@ -70,6 +70,13 @@ bool terminalTask::taskEntry()
     /* remoteTask() creates shared object in its init(), so we can get it now */
     CommandProcessor &cp = mCmdProc;
 
+    // MP3 Command Handlers
+    cp.addHandler(mp3_handler_set_volume    , "mp3_volume" , "MP3, increments or decrements volume by a percentage, 'mp3_volume up/down 0.05'");
+    cp.addHandler(mp3_handler_print_debug   , "mp3_debug"  , "MP3, prints useful debug information");
+    cp.addHandler(mp3_handler_set_base      , "mp3_base"   , "MP3, sets base enhancement values");
+    cp.addHandler(mp3_handler_set_treble    , "mp3_treble" , "MP3, sets treble control values");
+    cp.addHandler(mp3_handler_set_ff        , "mp3_ff"     , "MP3, sets fast forward mode on/off");
+
     // System information handlers
     cp.addHandler(taskListHandler, "info",    "Task/CPU Info.  Use 'info 200' to get CPU during 200ms");
     cp.addHandler(memInfoHandler,  "meminfo", "See memory info");

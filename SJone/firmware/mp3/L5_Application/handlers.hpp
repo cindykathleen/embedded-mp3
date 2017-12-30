@@ -25,6 +25,23 @@
 
 #include "command_handler.hpp"
 
+
+/////////////////////////////////////////////////////
+//                   MP3 Handlers                  //
+/////////////////////////////////////////////////////
+
+CMD_HANDLER_FUNC(mp3_handler_set_volume);
+
+CMD_HANDLER_FUNC(mp3_handler_print_debug);
+
+CMD_HANDLER_FUNC(mp3_handler_set_base);
+
+CMD_HANDLER_FUNC(mp3_handler_set_treble);
+
+CMD_HANDLER_FUNC(mp3_handler_set_ff);
+
+/////////////////////////////////////////////////////
+
 /// Handler for task list & CPU Information
 CMD_HANDLER_FUNC(taskListHandler);
 

@@ -5,7 +5,7 @@
 #include "utilities.h"
 // Project libraries
 #include "mp3_track_list.hpp"
-#include "vs1053b.hpp"
+#include "decoder.hpp"
 
 
 // Extern
@@ -34,23 +34,20 @@ struct
 } mp3_status;
 
 // Initialize MP3 player with the pin numbers
-static const vs1053b_gpio_init_t gpio_init =
+static const vs1053b_gpios_S gpio_init =
 {
-    .port_reset = GPIO_PORT1,
-    .port_dreq  = GPIO_PORT2,
-    .port_xcs   = GPIO_PORT0,
-    .port_xdcs  = GPIO_PORT0,
-    .pin_reset  = 19,
-    .pin_dreq   =  5,
-    .pin_xcs    = 29,
-    .pin_xdcs   = 30,
+    .reset_port = LPC_GPIO1,
+    .dreq_port  = LPC_GPIO2,
+    .xcs_port   = LPC_GPIO0,
+    .xdcs_port  = LPC_GPIO0,
+    .reset_pin  = 19,
+    .dreq_pin   =  5,
+    .xcs_pin    = 29,
+    .xdcs_pin   = 30,
 };
 
 // All purpose buffer for DecoderTask, mainly used for an MP3 segment to send to the device
 static uint8_t Buffer[MP3_SEGMENT_SIZE] = { 0 };
-
-// MP3 player
-static VS1053b MP3Player(gpio_init);
 
 // MP3 state machine
 static void RunStateMachine(void)
@@ -70,7 +67,8 @@ static void RunStateMachine(void)
         case STOP:
 
             // Stop playback
-            MP3Player.CancelDecoding();
+            // MP3Player.CancelDecoding();
+            decoder_cancel_decoding();
             // Close file
             mp3_close_file();
             mp3_status.next_state = IDLE;
@@ -110,7 +108,7 @@ static void RunStateMachine(void)
                 last_segment = (current_segment_size < MP3_SEGMENT_SIZE);
 
                 // Send segment to device
-                transfer_status = MP3Player.PlaySegment(Buffer, current_segment_size, last_segment);
+                transfer_status = decoder_play_segment(Buffer, current_segment_size, last_segment);
 
                 if (TRANSFER_FAILED == transfer_status)
                 {
@@ -255,7 +253,7 @@ void DecoderTask(void *p)
 {
     // Initialize the decoder
     // Not in Init() because needs task API and not needed by other tasks
-    MP3Player.SystemInit(DREQSemaphore);
+    decoder_init(gpio_init, DREQSemaphore);
 
     // Main loop
     while (1)

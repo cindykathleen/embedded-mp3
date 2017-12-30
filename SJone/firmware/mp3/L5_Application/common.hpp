@@ -2,7 +2,7 @@
 // Standard libraries
 #include <stdint.h>
 #include <stdarg.h>
-#include <cassert>
+// #include <cassert>
 // FreeRTOS libraries
 #include "FreeRTOS.h"
 #include "task.h"

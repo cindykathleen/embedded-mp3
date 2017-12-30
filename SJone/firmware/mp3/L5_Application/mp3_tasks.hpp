@@ -3,19 +3,19 @@
 #include "common.hpp"
 
 
-/*///////////////////////////////////////////////////
- * File dependency structure:                       *
- *                                                  *
- *      msg_protocol        utilities               *
- *              \            /                      *
- *                  common                          *
- *                  /    \                          *
- *           TxTask        mp3_struct               *
- *           RxTask                 \               *
- *                                     DecoderTask  *
- *                                     LCDTask      *
- *                                                  *
- *////////////////////////////////////////////////////
+/*/////////////////////////////////////////////////////
+ * File dependency structure:                         *
+ *                                                    *
+ *        msg_protocol       utilities                *
+ *                \            /                      *
+ *   mp3_uart         common                          *
+ *      \           /        \                        *
+ *      TxTask   ButtonTask     mp3_track_list        *
+ *      RxTask      DMATask              \            *
+ *                                       DecoderTask  *
+ *                                       LCDTask      *
+ *                                                    *
+ *//////////////////////////////////////////////////////
 
 /**
  *  ESP32 --> UART --> ESP32Task --> MessageRxQueue --> MP3Task
