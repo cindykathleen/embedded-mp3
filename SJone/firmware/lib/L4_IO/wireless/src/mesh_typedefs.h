@@ -134,7 +134,7 @@ typedef struct {
 /// Size of the data payload (Do not modify)
 #define MESH_DATA_PAYLOAD_SIZE      (MESH_PAYLOAD - MESH_PAYLOAD_HEADER_SIZE)
 
-#if (MESH_PAYLOAD <= 8) /* M_TODO : How do I calculate a compile time sizeof() instead of using hard-coded value? */
+#if (MESH_PAYLOAD <= 8) /* How do I calculate a compile time sizeof() instead of using hard-coded value? */
 #error "Mesh payload size is too small; it should be bigger than MESH_PAYLOAD_HEADER_SIZE"
 #endif
 

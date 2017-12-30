@@ -9,7 +9,6 @@
 
 
 // Extern
-SemaphoreHandle_t NextSemaphore;
 QueueHandle_t     SelectQueue;
 SemaphoreHandle_t DREQSemaphore;
 
@@ -181,27 +180,15 @@ static void HandleButtonTriggers(void)
                             case PLAY:  mp3_status.next_state = PAUSE; break;
                             case PAUSE: mp3_status.next_state = PLAY;  break;
                             case STOP:  mp3_status.next_state = PLAY;  break;
-                            default:    mp3_status.next_state = STOP;
-                                // TODO : After testing, remove these logs as they should never be reached
-                                LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
-                                break;
+                            default:    mp3_status.next_state = STOP;  break;
+                                // LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
                         }
                         break;
 
                     // Button 1 : Stop
                     case BUTTON_STOP:
 
-                        // TODO : Simplify
-                        switch (mp3_status.next_state)
-                        {
-                            case IDLE:  mp3_status.next_state = STOP;  break;
-                            case PLAY:  mp3_status.next_state = STOP;  break;
-                            case PAUSE: mp3_status.next_state = STOP;  break;
-                            case STOP:  mp3_status.next_state = STOP;  break;
-                            default:    mp3_status.next_state = STOP;
-                                LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
-                                break;
-                        }
+                        mp3_status.next_state = STOP;
                         break;
 
                     // Button 2 : Go to next track
@@ -219,14 +206,9 @@ static void HandleButtonTriggers(void)
                             case PLAY:  mp3_status.next_state = PLAY;  break;
                             case PAUSE: mp3_status.next_state = PLAY;  break;
                             case STOP:  mp3_status.next_state = IDLE;  break;
-                            default:    mp3_status.next_state = STOP;
-                                LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
-                                break;
+                            default:    mp3_status.next_state = STOP;  break;
+                                // LOG_ERROR("[HandleButtonTriggers] Impossible next state: %d\n", mp3_status.next_state);
                         }
-
-                        // TODO : Remove this as DecoderTask SHOULD always go first
-                        // Signal LCDTask to change track details
-                        xSemaphoreGive(NextSemaphore);
                         break;
 
                 #if 0
@@ -263,11 +245,7 @@ void Init_DecoderTask(void)
     mp3_init(Buffer, MP3_SEGMENT_SIZE);
 
     // Create semaphore
-    NextSemaphore = xSemaphoreCreateBinary();
     DREQSemaphore = xSemaphoreCreateBinary();
-
-    // Initialize the decoder
-    MP3Player.SystemInit(DREQSemaphore);
 
     // Create queue
     SelectQueue = xQueueCreate(1, sizeof(int));
@@ -275,21 +253,20 @@ void Init_DecoderTask(void)
 
 void DecoderTask(void *p)
 {
+    // Initialize the decoder
+    // Not in Init() because needs task API and not needed by other tasks
+    MP3Player.SystemInit(DREQSemaphore);
+
     // Main loop
     while (1)
     {
         // Check for button triggers
         HandleButtonTriggers();
         
-        // uint64_t start = sys_get_uptime_us();
         // Execute the next state
         RunStateMachine();
-        // uint64_t end   = sys_get_uptime_us() - start;
-        // printf("Elapsed: %lu \n", (uint32_t)end);
 
         // CheckRxQueue();
-
-        // xEventGroupSetBits(WatchdogEventGroup, WATCHDOG_DECODER_BIT);
 
         // Data is sent to decoder fast enough that the task can sleep for a bit
         DELAY_MS(7);

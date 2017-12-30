@@ -10,6 +10,7 @@
 
 #define MAX_DREQ_TIMEOUT_US (50000)
 #define MAX_DREQ_TIMEOUT_MS (TICK_MS(50))
+#define MAX_CS_TIMEOUT      (TICK_MS(50))
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //
@@ -44,6 +45,8 @@ VS1053b::VS1053b(vs1053b_gpio_init_t init) :
     Status.low_power_mode     = false;
     Status.playing            = false;
     Status.waiting_for_cancel = false;
+
+    CSMutex = xSemaphoreCreateMutex();
 }
 
 void VS1053b::SystemInit(SemaphoreHandle_t dreq_sem)
@@ -113,7 +116,7 @@ void VS1053b::SystemInit(SemaphoreHandle_t dreq_sem)
 vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
 {
     // Wait until DREQ goes high
-    if (!WaitForDREQ(false))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000us.\n");
         return TRANSFER_FAILED;
@@ -143,7 +146,7 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
             }
             
             // Wait until DREQ goes high
-            if (!WaitForDREQ(false))
+            if (!WaitForDREQ())
             {
                 LOG_ERROR("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
                 return TRANSFER_FAILED;
@@ -161,7 +164,7 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
             }
             
             // Wait until DREQ goes high
-            if (!WaitForDREQ(false))
+            if (!WaitForDREQ())
             {
                 LOG_ERROR("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
                 return TRANSFER_FAILED;
@@ -391,10 +394,12 @@ void VS1053b::SetVolume(uint8_t left_vol, uint8_t right_vol)
     UpdateRemoteRegister(VOL);
 }
 
-// TODO : Make into percentage
-void VS1053b::IncrementVolume(void)
+void VS1053b::IncrementVolume(float percentage)
 {
-    const uint8_t increment_step = 0xFF / 32;
+    // Limit to maximum 100%
+    percentage = MIN(1, percentage);
+
+    uint8_t increment_step = 0xFF * percentage;
 
     uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
     uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
@@ -407,14 +412,17 @@ void VS1053b::IncrementVolume(void)
     printf("Volume: %04X\n", RegisterMap[VOL].reg_value);
 }
 
-void VS1053b::DecrementVolume(void)
+void VS1053b::DecrementVolume(float percentage)
 {
-    const uint8_t increment_step = 0xFF / 32;
+    // Limit to maximum 100%
+    percentage = MIN(1, percentage);
+
+    uint8_t decrement_step = 0xFF * percentage;
 
     uint8_t left_vol  = RegisterMap[VOL].reg_value >> 8;
     uint8_t right_vol = RegisterMap[VOL].reg_value & 0x00FF;
-    left_vol  = (left_vol  - increment_step < 0) ? (0) : (left_vol  - increment_step);
-    right_vol = (right_vol - increment_step < 0) ? (0) : (right_vol - increment_step);
+    left_vol  = (left_vol  - decrement_step < 0) ? (0) : (left_vol  - decrement_step);
+    right_vol = (right_vol - decrement_step < 0) ? (0) : (right_vol - decrement_step);
     RegisterMap[VOL].reg_value = (left_vol << 8) | (right_vol & 0xFF);
 
     UpdateRemoteRegister(VOL);
@@ -533,7 +541,6 @@ vs1053b_transfer_status_E VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool
 
 void VS1053b::SetFastForwardMode(bool on)
 {
-    // TODO : make it configurable
     const uint16_t play_speed_register_address = 0x1E04;
 
     if (on)
@@ -688,20 +695,17 @@ bool VS1053b::IsPlaying()
 //                                         INLINE FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// TODO : Add mutex
 inline bool VS1053b::SetXDCS(bool value)
 {
-    // Can't set XDCS low when XCS is also low
-    if (!GetXCS() && value == false) 
+    if (!xSemaphoreTake(CSMutex, MAX_CS_TIMEOUT))
     {
+        LOG_ERROR("[VS1053b::SetXDCS] Failed to take CSMutex.\n");
         return false;
     }
-    else 
+    else
     {
-        // TODO : Change this back
-        if (value) LPC_GPIO0->FIOSET |= (1 << 30);
-        else       LPC_GPIO0->FIOCLR |= (1 << 30);
         XDCS.SetValue(value);
+        xSemaphoreGive(CSMutex);
         return true;
     }
 }
@@ -713,14 +717,15 @@ inline bool VS1053b::GetXDCS()
 
 inline bool VS1053b::SetXCS(bool value)
 {
-    // Can't set XCS low when XDCS is also low
-    if (!GetXDCS() && value == false) 
+    if (!xSemaphoreTake(CSMutex, MAX_CS_TIMEOUT))
     {
+        LOG_ERROR("[VS1053b::SetXCS] Failed to take CSMutex.\n");
         return false;
     }
-    else 
+    else
     {
         XCS.SetValue(value);
+        xSemaphoreGive(CSMutex);
         return true;
     }
 }
@@ -818,42 +823,35 @@ inline void VS1053b::ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
 //                                       PRIVATE FUNCTIONS                                        //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool VS1053b::WaitForDREQ(bool is_blocking)
+bool VS1053b::WaitForDREQ()
 {
     bool success = true;
-
-    if (is_blocking)
+    if (!DeviceReady())
     {
-        int timeout_us = MAX_DREQ_TIMEOUT_US;
-    
-        // Wait until DREQ goes high
-        while (!DeviceReady())
-        {
-            delay_us(100);
-            timeout_us  -= 100;
-            if (timeout_us <= 0)
-            {
-                success = false;
-                break;
-            }
-        }
+        // If the sem is given, toss it away and try to take again
+        xSemaphoreTake(DREQSem, NO_DELAY);            
+        success = xSemaphoreTake(DREQSem, MAX_DREQ_TIMEOUT_MS);
     }
-    else
-    {
-        long timeout_us = MAX_DREQ_TIMEOUT_MS;
-    
-        if (!DeviceReady())
-        {
-            // If the sem is given, toss it away and try to take again
-            xSemaphoreTake(DREQSem, NO_DELAY);            
-            success = xSemaphoreTake(DREQSem, timeout_us);
-        }
-    }
-
     return success;
+
+#if 0
+    // Blocking version
+    int timeout_us = MAX_DREQ_TIMEOUT_US;
+
+    // Wait until DREQ goes high
+    while (!DeviceReady())
+    {
+        delay_us(100);
+        timeout_us  -= 100;
+        if (timeout_us <= 0)
+        {
+            success = false;
+            break;
+        }
+    }
+#endif
 }
 
-// TODO : Clean up
 uint16_t VS1053b::ReadRam(uint16_t address)
 {
     // Wait until DREQ goes high
@@ -866,10 +864,6 @@ uint16_t VS1053b::ReadRam(uint16_t address)
     XCS.SetLow();
 
     // Write address into WRAMADDR
-    // ssp0_exchange_byte(OPCODE_WRITE);
-    // ssp0_exchange_byte(WRAMADDR);
-    // ssp0_exchange_byte(address >> 8);
-    // ssp0_exchange_byte(address & 0xFF);
     RegisterMap[WRAMADDR].reg_value = address;
     UpdateRemoteRegister(WRAMADDR);
 
@@ -883,11 +877,7 @@ uint16_t VS1053b::ReadRam(uint16_t address)
     XCS.SetHigh();
     XCS.SetLow();
 
-    // Start reading
-    // ssp0_exchange_byte(OPCODE_READ);
-    // ssp0_exchange_byte(WRAM);
-    // data |= ssp0_exchange_byte(0x00) << 8;
-    // data |= ssp0_exchange_byte(0x00);
+    // Read WRAM
     UpdateLocalRegister(WRAM);
 
     XCS.SetHigh();
@@ -938,14 +928,6 @@ uint8_t VS1053b::GetEndFillByte()
     return half_word & 0xFF;
 }
 
-void VS1053b::BlockMicroSeconds(uint16_t microseconds)
-{
-    MicroSecondStopWatch swatch;
-
-    // TODO add a fault condition
-    while (swatch.getElapsedTime() < microseconds);
-}
-
 float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
 {
     UpdateLocalRegister(CLOCKF);
@@ -986,23 +968,12 @@ bool VS1053b::TransferSCICommand(SCI_reg reg)
         return false;
     }
     // High byte first
-    // SPI.SendByte(OPCODE_WRITE);
-    // SPI.SendByte(reg);
-    // SPI.SendByte(RegisterMap[reg].reg_value >> 8);
-    // SPI.SendByte(RegisterMap[reg].reg_value & 0xFF);
     ssp0_exchange_byte(OPCODE_WRITE);
     ssp0_exchange_byte(reg);
     ssp0_exchange_byte(RegisterMap[reg].reg_value >> 8);
     ssp0_exchange_byte(RegisterMap[reg].reg_value & 0xFF);
     // Deselect XCS
     SetXCS(true);
-
-    // // CLOCKF is the only register where the calculation is based on XTALI not CLKI
-    // const bool reg_is_clockf = (CLOCKF == reg);
-
-    // // Delay amount of time after writing to SCI register to safely execute other commands
-    // uint8_t delay_us = ClockCyclesToMicroSeconds(RegisterMap[reg].clock_cycles, reg_is_clockf);
-    // BlockMicroSeconds(delay_us);
 
     // Wait until DREQ goes high
     if (!WaitForDREQ())

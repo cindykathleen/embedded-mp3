@@ -66,6 +66,7 @@ static void PrintScreen(uint8_t track_num, screen_E screen)
             }
 
 #if MP3_TESTING
+            // Safety check
             if (!track->title)  { LOG_ERROR("[PrintScreen] Could not find track title #%d\n",  track_num); return; }
             if (!track->artist) { LOG_ERROR("[PrintScreen] Could not find track artist #%d\n", track_num); return; }
             if (!track->genre)  { LOG_ERROR("[PrintScreen] Could not find track genre #%d\n",  track_num); return; }
@@ -94,110 +95,6 @@ static void PrintScreen(uint8_t track_num, screen_E screen)
     }
 }
 
-static void HandleButtonTriggers(void)
-{
-    // Size of track list
-    static const uint8_t track_list_size = mp3_get_track_list_size();
-
-    // Start off with song 0
-    static int track_num = 0;
-
-    // Check if any buttons were pressed
-    uint8_t triggered_button = INVALID_BUTTON;
-    xQueueReceive(LCDButtonQueue, &triggered_button, MAX_DELAY);
-
-    switch (CurrentScreen)
-    {
-        case SCREEN_PLAYING:
-
-            switch (triggered_button)
-            {
-                // Change track details
-                case BUTTON_NEXT:
-
-                    // Block until DecoderTask changes the track + gives semaphore
-                    xSemaphoreTake(NextSemaphore, MAX_DELAY);
-
-                    // Get new track number, could have changed before after semaphore taken
-                    track_num = mp3_get_current_track_num();
-
-                    // Print new track's details
-                    PrintScreen(track_num, CurrentScreen);
-                    break;
-
-                // Go back to SCREEN_SELECT
-                case BUTTON_BACK:
-
-                    // Change screen
-                    // TODO : Evaluate if mutex is even needed, and if variable is even global
-                    xSemaphoreTake(ScreenMutex, MAX_DELAY);
-                    {
-                        CurrentScreen = SCREEN_SELECT;
-                    }
-                    xSemaphoreGive(ScreenMutex);
-
-                    // Get new track number
-                    track_num = mp3_get_current_track_num();
-
-                    // Print new screen
-                    PrintScreen(track_num, CurrentScreen);
-                    break;
-
-                // Should never reach this state
-                default:
-                    LOG_ERROR("[LCDTask::HandleButtonTriggers] Received impossible button in SCREEN_PLAYING: %d\n", triggered_button);
-                    break;
-            }
-            break;
-
-        case SCREEN_SELECT:
-
-            switch (triggered_button)
-            {
-                // Button 0 : Scroll down one song
-                case BUTTON_SCROLL_DOWN:
-
-                    if (++track_num >= track_list_size)
-                    {
-                        track_num = 0;
-                    }
-                    PrintScreen(track_num, CurrentScreen);
-                    break;
-
-                // Button 1 : Scroll up one song
-                case BUTTON_SCROLL_UP:
-
-                    if (--track_num < 0)
-                    {
-                        track_num = track_list_size - 1;
-                    }
-                    PrintScreen(track_num, CurrentScreen);    
-                    break;
-
-                // Button 2 : Select song and change screens
-                case BUTTON_SELECT:
-
-                    // Print new screen, before variable changes in Decoder Task
-                    PrintScreen((uint8_t)track_num, SCREEN_PLAYING);
-
-                    // Send the track number to DecoderTask
-                    xQueueSend(SelectQueue, &track_num, MAX_DELAY);
-                    break;
-
-                // Should never reach this state
-                default:
-                    LOG_ERROR("[LCDTask::HandleButtonTriggers] Received impossible button in SCREEN_SELECT: %d\n", triggered_button);
-                    break;
-            }
-            break;
-
-        // Should never reach this state
-        default:
-            LOG_ERROR("[LCDTask::HandleButtonTriggers] Impossible screen selected: %d\n", CurrentScreen);
-            break;
-    }
-}
-
 void Init_LCDTask(void) 
 {
     // Initialize LCD peripheral
@@ -213,10 +110,106 @@ void Init_LCDTask(void)
 
 void LCDTask(void *p)
 {
+    // Size of track list
+    static const uint8_t track_list_size = mp3_get_track_list_size();
+
+    // Start off with song 0
+    static int track_num = 0;
+
+    // Check if any buttons were pressed
+    uint8_t triggered_button = INVALID_BUTTON;
+
     // Main loop
     while (1)
     {
-        // TODO : Move more code from functions into task
-        HandleButtonTriggers();
+        xQueueReceive(LCDButtonQueue, &triggered_button, MAX_DELAY);
+
+        switch (CurrentScreen)
+        {
+            case SCREEN_PLAYING:
+
+                switch (triggered_button)
+                {
+                    // Button 2 : Change track details
+                    case BUTTON_NEXT:
+
+                        // Get new track number, could have changed before after semaphore taken
+                        track_num = mp3_get_current_track_num();
+
+                        // Print new track's details
+                        PrintScreen(track_num, CurrentScreen);
+                        break;
+
+                    // Button 4 : Go back to SCREEN_SELECT
+                    case BUTTON_BACK:
+
+                        // Change screen
+                        xSemaphoreTake(ScreenMutex, MAX_DELAY);
+                        {
+                            CurrentScreen = SCREEN_SELECT;
+                        }
+                        xSemaphoreGive(ScreenMutex);
+
+                        // Get new track number
+                        track_num = mp3_get_current_track_num();
+
+                        // Print new screen
+                        PrintScreen(track_num, CurrentScreen);
+                        break;
+
+                    // Should never reach this state
+                    default:
+                        LOG_ERROR("[LCDTask] Received impossible button in SCREEN_PLAYING: %d\n", triggered_button);
+                        break;
+                }
+                break;
+
+            case SCREEN_SELECT:
+
+                switch (triggered_button)
+                {
+                    // Button 0 : Scroll down one song
+                    case BUTTON_SCROLL_DOWN:
+
+                        if (++track_num >= track_list_size)
+                        {
+                            track_num = 0;
+                        }
+                        PrintScreen(track_num, CurrentScreen);
+                        break;
+
+                    // Button 1 : Scroll up one song
+                    case BUTTON_SCROLL_UP:
+
+                        if (--track_num < 0)
+                        {
+                            track_num = track_list_size - 1;
+                        }
+                        PrintScreen(track_num, CurrentScreen);    
+                        break;
+
+                    // Button 2 : Select song and change screens
+                    case BUTTON_SELECT:
+
+                        // Print new screen, before variable changes in Decoder Task
+                        PrintScreen((uint8_t)track_num, SCREEN_PLAYING);
+
+                        // Send the track number to DecoderTask
+                        xQueueSend(SelectQueue, &track_num, MAX_DELAY);
+                        break;
+
+                    // Should never reach this state
+                    default:
+                        LOG_ERROR("[LCDTask] Received impossible button in SCREEN_SELECT: %d\n", triggered_button);
+                        break;
+                }
+                break;
+
+            // Should never reach this state
+            default:
+                LOG_ERROR("[LCDTask] Impossible screen selected: %d\n", CurrentScreen);
+                break;
+        }
+
     }
 }

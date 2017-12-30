@@ -19,14 +19,14 @@
 // #define LOG_LEVEL   1
 
 // Helper macros for size comparison or related
-#define MAX(a, b)   ((a > b) ? (a) : (b))
-#define MIN(a, b)   ((a < b) ? (a) : (b))
+#define MAX(a, b)            ((a > b) ? (a) : (b))
+#define MIN(a, b)            ((a < b) ? (a) : (b))
 
 // Helper macro for tick to ms conversions
-#define DELAY_MS(x) (vTaskDelay(x / portTICK_PERIOD_MS))
-#define TICK_MS(x)  (x / portTICK_PERIOD_MS)
-#define MAX_DELAY   (portMAX_DELAY)
-#define NO_DELAY    (0)
+#define DELAY_MS(x)          (vTaskDelay(x / portTICK_PERIOD_MS))
+#define TICK_MS(x)           (x / portTICK_PERIOD_MS)
+#define MAX_DELAY            (portMAX_DELAY)
+#define NO_DELAY             (0)
 
 // Buffer max limits
 #define MAX_TRACK_BUFLEN     (32)
@@ -86,10 +86,7 @@ enum
     BUTTON_PEEK        = 3, // Button 3, maybe not
 };
 
-// When the next button is pressed, DecoderTask has to change tracks and then LCDTask has to update screen in this order
-// LCDTask takes and DecoderTask gives
-extern SemaphoreHandle_t NextSemaphore;
-
+// Queue for sending track number to play from LCDTask to DecoderTask
 extern QueueHandle_t SelectQueue;
 
 // Semaphore for waiting on DREQ

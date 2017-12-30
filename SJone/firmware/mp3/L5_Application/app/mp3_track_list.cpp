@@ -216,7 +216,7 @@ void mp3_init(uint8_t *buffer, uint32_t size)
     DIR directory;
     FILINFO file_info;
     uint32_t counter = 0;
-    char name_buffer[32] = { 0 };
+    char name_buffer[MAX_TRACK_BUFLEN] = { 0 };
 
     // Open directory, 1: for sd card directory
     const char *directory_path = "1:";
@@ -299,12 +299,6 @@ void mp3_init(uint8_t *buffer, uint32_t size)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         API Functions                                         //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// TODO : Remove short name to decrease stack usage at cost of run-time performance
-// void mp3_full_to_short(char *full_name, char *short_name, uint8_t full_name_length)
-// {
-//     safe_strcpy(short_name, full_name, full_name_length-3);
-// }
 
 bool mp3_open_file_by_index(uint8_t index)
 {

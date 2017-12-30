@@ -192,8 +192,8 @@ public:
     // @param right_vol : Volume of the right speaker
     void SetVolume(uint8_t left_vol, uint8_t right_vol);
 
-    void IncrementVolume(void);
-    void DecrementVolume(void);
+    void IncrementVolume(float percentage=0.05f);
+    void DecrementVolume(float percentage=0.05f);
 
     // @description     : Turns on or off the lower power mode
     // @param on        : True for on, false for off
@@ -269,6 +269,9 @@ private:
     GpioOutput XCS;
     GpioOutput XDCS;
 
+    // Only one CS can be active at a time, mutex to ensure that
+    SemaphoreHandle_t CSMutex;
+
     // Pointer to a semaphore that wait on DREQ to go HIGH
     SemaphoreHandle_t DREQSem;
 
@@ -343,8 +346,7 @@ private:
     //                                        PRIVATE FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // TODO : Change to 0 blocking
-    bool WaitForDREQ(bool is_blocking=true);
+    bool WaitForDREQ();
 
     // @description     : Read a register from RAM that is not a command register
     // @param address   : Address of register to read the data from
@@ -373,10 +375,6 @@ private:
 
     // @description     : Updates the header struct with fresh information
     void UpdateHeaderInformation();
-
-    // @description         : Blocks task until the timer reaches the specified time
-    // @param microseconds  : Number of microseconds to block for
-    void BlockMicroSeconds(uint16_t microseconds);
 
     // @description         : Computes the microseconds needed to delay for a specified amount of clock cycles
     // @param clock_cycles  : The number of cycles to apply to the calculation
