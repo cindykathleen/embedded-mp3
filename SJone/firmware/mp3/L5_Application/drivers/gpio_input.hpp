@@ -6,13 +6,8 @@ class GpioInput : public Gpio
 {
 public:
 
-	GpioInput(gpio_port_t port, gpio_pin_t pin) : Gpio(port, pin, INPUT)
-	{
-		/* EMPTY */
-	}
-
-	void Debounce()
-	{
-		while ( IsHigh() );
-	}
+    GpioInput(gpio_port_t port, uint8_t pin) : Gpio(port, pin, INPUT)
+    {
+        /* EMPTY */
+    }
 };

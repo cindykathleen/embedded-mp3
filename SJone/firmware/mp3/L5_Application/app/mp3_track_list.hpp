@@ -50,7 +50,7 @@ typedef enum
 // 2. Read SD card directory
 // 3. Loop through every file in the directory
 // 4. When a file has an mp3 file extension, store the file information into TrackList
-void mp3_init(uint8_t *buffer);
+void mp3_init(uint8_t *buffer, uint32_t size);
 
 // @description : Opens an MP3 file in the SD card file system
 // @param name  : Full name of the MP3 file to open, no need for prefixing "1:"
@@ -102,4 +102,6 @@ uint8_t mp3_get_current_track_num(void);
 
 void mp3_set_direction(seek_direction_E direction);
 
-void mp3_set_current_track(uint8_t index);
+// void mp3_set_current_track(uint8_t index);
+
+bool mp3_open_file_by_index(uint8_t index);

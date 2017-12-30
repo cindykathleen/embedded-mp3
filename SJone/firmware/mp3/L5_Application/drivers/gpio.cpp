@@ -1,17 +1,17 @@
 #include "gpio.hpp"
-#include "FreeRTOS.h"
-#include "task.h"
+#include <cassert>
+#include <stdio.h>
+#include "lpc_sys.h"
 
-Gpio::Gpio(gpio_port_t port, gpio_pin_t pin, gpio_mode_t mode)
+Gpio::Gpio(gpio_port_t port, uint8_t pin, gpio_mode_t mode) : Pin(pin)
 {
     // Loose check to see if pin number is out of range
-    if (pin > 31) {
+    if (pin > 31) 
+    {
         printf("Invalid Pin: %i\n", pin);
         assert(pin <= 31);
+        return;
     }
-
-    // Save pin number
-    Pin = pin;
 
     // Select GPIO functionality for specified pin
     SelectGpioFunction(port);
@@ -97,10 +97,18 @@ void Gpio::SelectGpioFunction(gpio_port_t port)
 
 bool Gpio::IsHigh()
 {
-    if (GpioPtr->FIOPIN & (1 << Pin))
+    return (GpioPtr->FIOPIN & (1 << Pin));
+}
+
+bool Gpio::IsHighDebounced()
+{
+    // Only register if 200ms since last trigger
+    static const uint64_t min_time_gap_us = 100;
+    static uint64_t last_time = sys_get_uptime_us();
+
+    if ((GpioPtr->FIOPIN & (1 << Pin)) && (sys_get_uptime_us() - last_time >= min_time_gap_us))
     {
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-        while(GpioPtr->FIOPIN & (1 << Pin));
+        last_time = sys_get_uptime_us();
         return true;
     }
     else

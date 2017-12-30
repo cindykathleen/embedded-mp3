@@ -1,8 +1,11 @@
 #pragma once
-#include <stop_watch.hpp>
+// Framework libraries
+#include "stop_watch.hpp"
+// Project libraries
+#include "common.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
-#include "spi.hpp"
+
 
 typedef enum
 {
@@ -133,7 +136,7 @@ public:
     VS1053b(vs1053b_gpio_init_t init);
 
     // @description     : Initializes the VS1053B system, all the pins, and the default states of the registers
-    void SystemInit();
+    void SystemInit(SemaphoreHandle_t dreq_sem);
 
     // @description     : Sends data to the device
     // @param data      : The data byte to write
@@ -142,7 +145,8 @@ public:
     vs1053b_transfer_status_E TransferData(uint8_t *data, uint32_t size);
 
     // @description     : Perform a hardware reset
-    void HardwareReset();
+    // @returns         : True for success, false for unsuccessful (timeout)
+    bool  HardwareReset();
 
     // @description     : Perform a software reset
     // @returns         : True for success, false for unsuccessful (timeout)
@@ -265,6 +269,9 @@ private:
     GpioOutput XCS;
     GpioOutput XDCS;
 
+    // Pointer to a semaphore that wait on DREQ to go HIGH
+    SemaphoreHandle_t DREQSem;
+
     // Stores a struct of the current mp3's header information
     vs1053b_mp3_header_S Header;
 
@@ -336,7 +343,8 @@ private:
     //                                        PRIVATE FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    bool WaitForDREQ(uint32_t timeout_us=1000);
+    // TODO : Change to 0 blocking
+    bool WaitForDREQ(bool is_blocking=true);
 
     // @description     : Read a register from RAM that is not a command register
     // @param address   : Address of register to read the data from

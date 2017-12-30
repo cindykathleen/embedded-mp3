@@ -1,23 +1,25 @@
+#include "vs1053b.hpp"
+// Standard libraries
 #include <cstring>
 #include <cmath>
 #include <stdio.h>
-#include "FreeRTOS.h"
-#include "tasks.hpp"
-#include "vs1053b.hpp"
-#include "spi.hpp"
+// Framework libraries
 #include "ssp0.h"
+#include "utilities.h"
 
-#define SPI              (Spi0::getInstance())
-#define MAX_DREQ_TIMEOUT (100000)
+
+#define MAX_DREQ_TIMEOUT_US (50000)
+#define MAX_DREQ_TIMEOUT_MS (TICK_MS(50))
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         SYSTEM FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VS1053b::VS1053b(vs1053b_gpio_init_t init) :    DREQ(init.port_dreq,   init.pin_dreq),
-                                                RESET(init.port_reset, init.pin_reset, true),
-                                                XCS(init.port_xcs,     init.pin_xcs, true),
-                                                XDCS(init.port_xdcs,   init.pin_xdcs, true)
+VS1053b::VS1053b(vs1053b_gpio_init_t init) :    
+                                            DREQ(init.port_dreq   , init.pin_dreq),
+                                            RESET(init.port_reset , init.pin_reset, true),
+                                            XCS(init.port_xcs     , init.pin_xcs  , true),
+                                            XDCS(init.port_xdcs   , init.pin_xdcs , true)
 {
     // Local register default values
     RegisterMap[MODE]        = { .reg_num=MODE,        .can_write=true,  .reset_value=0x4000, .clock_cycles=80,   .reg_value=0 };
@@ -44,13 +46,12 @@ VS1053b::VS1053b(vs1053b_gpio_init_t init) :    DREQ(init.port_dreq,   init.pin_
     Status.waiting_for_cancel = false;
 }
 
-void VS1053b::SystemInit()
+void VS1053b::SystemInit(SemaphoreHandle_t dreq_sem)
 {
+    DREQSem = dreq_sem;
+
     // Hardware reset
-    printf("[VS1053b::SystemInit] Resetting device...\n");
-    SetReset(false);
-    SetReset(true);
-    if (!WaitForDREQ(100000)) printf("[VS1053b::SystemInit] Failed to hardware reset timeout of 100000us.\n");
+    if (!HardwareReset())     printf("[VS1053b::SystemInit] Failed to hardware reset timeout of 100000 us.\n");
 
     // Software reset
     if (!SoftwareReset())     printf("[VS1053b::SystemInit] Software reset failed...\n");
@@ -60,13 +61,35 @@ void VS1053b::SystemInit()
     if (!SetXCS(true))        printf("[VS1053b::SystemInit] Failed to set XCS to HIGH at init.\n");
     if (!SetXDCS(true))       printf("[VS1053b::SystemInit] Failed to set XDCS to HIGH at init.\n");
 
+    // Check if booted in RTMIDI mode which causes issues with MP3 not playing     
+    // Fix : http://www.bajdi.com/lcsoft-vs1053-mp3-module/#comment-33773     
+    UpdateLocalRegister(AUDATA);       
+    if (44100 == RegisterMap[AUDATA].reg_value || 44101 == RegisterMap[AUDATA].reg_value)      
+    {      
+        printf("[VS1053b::SystemInit] Defaulted to MIDI mode. Switching to MP3 mode.\n");      
+        // Switch to MP3 mode if in RTMIDI mode        
+        RegisterMap[WRAMADDR].reg_value = 0xC017;      
+        RegisterMap[WRAM].reg_value     = 3;       
+        UpdateRemoteRegister(WRAMADDR);        
+        UpdateRemoteRegister(WRAM);        
+        RegisterMap[WRAMADDR].reg_value = 0xC019;      
+        RegisterMap[WRAM].reg_value     = 0;       
+        UpdateRemoteRegister(WRAMADDR);        
+        UpdateRemoteRegister(WRAM);        
+        // Wait a little to make sure it was written       
+        delay_ms(100);   
+        // Software reset to boot into MP3 mode        
+        SoftwareReset();       
+    }      
+
     UpdateLocalRegister(STATUS);
     printf("[VS1053b::SystemInit] Initial status: %04X\n", RegisterMap[STATUS].reg_value);
-    printf("[VS1053b::SystemInit] Updating device registers with default settings.\n");
+    printf("[VS1053b::SystemInit] Initial DREQ: %d\n", DeviceReady());
+    printf("[VS1053b::SystemInit] Updating device registers with default settings...\n");
 
     const uint16_t mode_default_state   = 0x4800;
     const uint16_t clock_default_state  = 0x6000;
-    const uint16_t volume_default_state = 0x2020;
+    const uint16_t volume_default_state = 0x3333;
 
     RegisterMap[MODE].reg_value   = mode_default_state;
     RegisterMap[CLOCKF].reg_value = clock_default_state;
@@ -75,6 +98,8 @@ void VS1053b::SystemInit()
     UpdateRemoteRegister(MODE);
     UpdateRemoteRegister(CLOCKF);
     UpdateRemoteRegister(VOL);
+
+    SetFastForwardMode(false);
 
     // Update local register values
     if (!UpdateRegisterMap())
@@ -88,7 +113,7 @@ void VS1053b::SystemInit()
 vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
 {
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ(false))
     {
         printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000us.\n");
         return TRANSFER_FAILED;
@@ -105,10 +130,11 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
 
         if (!SetXDCS(false))
         {
-            printf("TRANSFERDATA: Failed to set XDCS low!\n");
+            LOG_ERROR("[VS1053b::TransferData] Failed to set XDCS low!\n");
             return TRANSFER_FAILED;
         }
 
+        // uint64_t start = sys_get_uptime_us();
         for (uint32_t i=0; i<cycles; i++)
         {
             for (int byte=0; byte<32; byte++)
@@ -117,12 +143,15 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
             }
             
             // Wait until DREQ goes high
-            if (!WaitForDREQ(100000))
+            if (!WaitForDREQ(false))
             {
-                printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
+                LOG_ERROR("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
                 return TRANSFER_FAILED;
             }
         }
+        // uint64_t end   = sys_get_uptime_us() - start;
+        // printf("Elapsed: %lu \n", (uint32_t)end);
+
 
         if (remainder > 0)
         {
@@ -132,16 +161,16 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
             }
             
             // Wait until DREQ goes high
-            if (!WaitForDREQ(100000))
+            if (!WaitForDREQ(false))
             {
-                printf("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
+                LOG_ERROR("[VS1053b::TransferData] Failed to transfer data timeout of 100000.\n");
                 return TRANSFER_FAILED;
             }
         }
 
         if (!SetXDCS(true))
         {
-            printf("TRANSFERDATA: Failed to set XDCS low!\n");
+            LOG_ERROR("[VS1053b::TransferData] Failed to set XDCS low!\n");
             return TRANSFER_FAILED;
         }
 
@@ -161,22 +190,18 @@ vs1053b_transfer_status_E VS1053b::TransferData(uint8_t *data, uint32_t size)
     }
 }
 
-void VS1053b::HardwareReset()
+bool VS1053b::HardwareReset()
 {
     // Pull reset line low
     SetReset(false);
 
-    // Wait 1 ms, should wait shorter if possible
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    // Wait 1 ms
+    delay_ms(1);
 
     // Pull reset line back high
     SetReset(true);
 
-    // Wait for 3 us at a time until DREQ goes high
-    while (!DeviceReady())
-    {
-        BlockMicroSeconds(3);
-    }
+    return WaitForDREQ();
 }
 
 bool VS1053b::SoftwareReset()
@@ -190,7 +215,7 @@ bool VS1053b::SoftwareReset()
     UpdateRemoteRegister(MODE);
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::SoftwareReset] Failed to software reset timeout of 100000us.\n");
         return false;
@@ -250,15 +275,16 @@ void VS1053b::CancelDecoding()
 {
     const uint8_t CANCEL_BIT = (1 << 3);
 
-    UpdateLocalRegister(MODE);
-    RegisterMap[MODE].reg_value |= CANCEL_BIT;
-    UpdateRemoteRegister(MODE);
+    if (IsPlaying())
+    {
+        UpdateLocalRegister(MODE);
+        RegisterMap[MODE].reg_value |= CANCEL_BIT;
+        UpdateRemoteRegister(MODE);
+        // Set flag to request cancellation
+        Status.waiting_for_cancel = true;
+    }
 
-    // Set flag to request cancellation
-    // Status.waiting_for_cancel = true;
     Status.playing = false;
-
-    printf("[VS1053b::CancelDecoding] Waiting for cancel...\n");
 }
 
 void VS1053b::SetEarSpeakerMode(ear_speaker_mode_t mode)
@@ -365,6 +391,7 @@ void VS1053b::SetVolume(uint8_t left_vol, uint8_t right_vol)
     UpdateRemoteRegister(VOL);
 }
 
+// TODO : Make into percentage
 void VS1053b::IncrementVolume(void)
 {
     const uint8_t increment_step = 0xFF / 32;
@@ -484,7 +511,7 @@ vs1053b_transfer_status_E VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool
         SendEndFillByte(2052);
 
         // Wait 50 ms buffer time between playbacks
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        delay_ms(50);
 
         // Update status flags
         Status.playing = false;
@@ -504,11 +531,6 @@ vs1053b_transfer_status_E VS1053b::PlaySegment(uint8_t *mp3, uint32_t size, bool
     return status;
 }
 
-void SwitchPlayback(uint8_t *mp3, uint32_t size)
-{
-    // Not implemented yet
-}
-
 void VS1053b::SetFastForwardMode(bool on)
 {
     // TODO : make it configurable
@@ -526,11 +548,6 @@ void VS1053b::SetFastForwardMode(bool on)
         WriteRam(play_speed_register_address, normal_speed);
         Status.fast_forward_mode = false;
     }
-}
-
-void SetRewindMode(bool on)
-{
-    // Not implemented yet
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -671,6 +688,7 @@ bool VS1053b::IsPlaying()
 //                                         INLINE FUNCTIONS                                       //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO : Add mutex
 inline bool VS1053b::SetXDCS(bool value)
 {
     // Can't set XDCS low when XCS is also low
@@ -680,10 +698,9 @@ inline bool VS1053b::SetXDCS(bool value)
     }
     else 
     {
-        if (value)
-            LPC_GPIO0->FIOSET |= (1 << 30);
-        else
-            LPC_GPIO0->FIOCLR |= (1 << 30);
+        // TODO : Change this back
+        if (value) LPC_GPIO0->FIOSET |= (1 << 30);
+        else       LPC_GPIO0->FIOCLR |= (1 << 30);
         XDCS.SetValue(value);
         return true;
     }
@@ -713,15 +730,10 @@ inline bool VS1053b::GetXCS()
     return XCS.GetValue();
 }
 
-inline bool VS1053b::GetDREQ()
-{
-    return DREQ.IsHigh();
-}
-
 inline bool VS1053b::DeviceReady()
 {
     // Return true for ready when DREQ is HIGH
-    return GetDREQ();
+    return DREQ.IsHigh();
 }
 
 inline void VS1053b::SetReset(bool value)
@@ -729,6 +741,7 @@ inline void VS1053b::SetReset(bool value)
     RESET.SetValue(value);
 }
 
+#if 0
 inline bool VS1053b::IsValidAddress(uint16_t address)
 {
     bool valid = true;
@@ -745,13 +758,14 @@ inline bool VS1053b::IsValidAddress(uint16_t address)
 
     return valid;
 }
+#endif
 
 inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
 {
     uint16_t data = 0;
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::UpdateLocalRegister] Failed to update register: %d, DREQ timeout of 100000.\n", reg);
         return false;
@@ -765,10 +779,6 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
     }
     else
     {
-        // SPI.SendByte(OPCODE_READ);
-        // SPI.SendByte(reg);
-        // data |= SPI.ReceiveByte() << 8;
-        // data |= SPI.ReceiveByte();
         ssp0_exchange_byte(OPCODE_READ);
         ssp0_exchange_byte(reg);
         data |= ssp0_exchange_byte(0x00) << 8;
@@ -779,7 +789,7 @@ inline bool VS1053b::UpdateLocalRegister(SCI_reg reg)
     }
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::UpdateLocalRegister] Failed to update register: %d, DREQ timeout of 100000.\n", reg);
         return false;
@@ -808,25 +818,46 @@ inline void VS1053b::ChangeSCIRegister(SCI_reg reg, uint8_t bit, bool bit_value)
 //                                       PRIVATE FUNCTIONS                                        //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool VS1053b::WaitForDREQ(uint32_t timeout_us)
+bool VS1053b::WaitForDREQ(bool is_blocking)
 {
-    // Wait until DREQ goes high
-    while (!DeviceReady())
+    bool success = true;
+
+    if (is_blocking)
     {
-        BlockMicroSeconds(100);
-        timeout_us -= 100;
-        if (timeout_us == 0)
+        int timeout_us = MAX_DREQ_TIMEOUT_US;
+    
+        // Wait until DREQ goes high
+        while (!DeviceReady())
         {
-            return false;
+            delay_us(100);
+            timeout_us  -= 100;
+            if (timeout_us <= 0)
+            {
+                success = false;
+                break;
+            }
         }
     }
-    return true;
+    else
+    {
+        long timeout_us = MAX_DREQ_TIMEOUT_MS;
+    
+        if (!DeviceReady())
+        {
+            // If the sem is given, toss it away and try to take again
+            xSemaphoreTake(DREQSem, NO_DELAY);            
+            success = xSemaphoreTake(DREQSem, timeout_us);
+        }
+    }
+
+    return success;
 }
 
+// TODO : Clean up
 uint16_t VS1053b::ReadRam(uint16_t address)
 {
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
         return 0;
@@ -843,7 +874,7 @@ uint16_t VS1053b::ReadRam(uint16_t address)
     UpdateRemoteRegister(WRAMADDR);
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
         return 0;
@@ -867,7 +898,7 @@ uint16_t VS1053b::ReadRam(uint16_t address)
 bool VS1053b::WriteRam(uint16_t address, uint16_t value)
 {
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
         return false;
@@ -880,7 +911,7 @@ bool VS1053b::WriteRam(uint16_t address, uint16_t value)
     UpdateRemoteRegister(WRAMADDR);
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::ReadRam] Failed to read RAM[%d], timeout of 100000.\n", address);
         return false;
@@ -910,7 +941,6 @@ uint8_t VS1053b::GetEndFillByte()
 void VS1053b::BlockMicroSeconds(uint16_t microseconds)
 {
     MicroSecondStopWatch swatch;
-    swatch.start();
 
     // TODO add a fault condition
     while (swatch.getElapsedTime() < microseconds);
@@ -943,7 +973,7 @@ float VS1053b::ClockCyclesToMicroSeconds(uint16_t clock_cycles, bool is_clockf)
 bool VS1053b::TransferSCICommand(SCI_reg reg)
 {
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::TransferSCICommand] Failed to update register: %d, DREQ timeout of 100000us.\n", reg);
         return false;
@@ -975,7 +1005,7 @@ bool VS1053b::TransferSCICommand(SCI_reg reg)
     // BlockMicroSeconds(delay_us);
 
     // Wait until DREQ goes high
-    if (!WaitForDREQ(100000))
+    if (!WaitForDREQ())
     {
         printf("[VS1053b::TransferSCICommand] Failed to update register: %d, DREQ timeout of 100000us.\n", reg);
         return false;

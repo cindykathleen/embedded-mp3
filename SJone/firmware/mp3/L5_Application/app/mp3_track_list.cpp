@@ -193,19 +193,21 @@ static void mp3_id3_parser(uint8_t *buffer, uint32_t size, track_S *track)
     }
 }
 
-static void mp3_get_track_info(track_S *track, uint8_t *buffer)
+static void mp3_get_track_info(track_S *track, uint8_t *buffer, uint32_t size)
 {
     // Only parse tags in the first 470 bytes
     const uint32_t max_header_size = 470;
+    uint32_t segment_size = MIN(max_header_size, size);
+
     // Unused
     uint32_t current_segment_size;
     // Read first segment
-    mp3_read_segment(buffer, max_header_size, &current_segment_size);
+    mp3_read_segment(buffer, segment_size, &current_segment_size);
     // Parse segment
-    mp3_id3_parser(buffer, max_header_size, track);
+    mp3_id3_parser(buffer, segment_size, track);
 }
 
-void mp3_init(uint8_t *buffer)
+void mp3_init(uint8_t *buffer, uint32_t size)
 {
     // Allocate memory for TrackList
     TrackList = new track_S*[MAX_TRACK_LIST_SIZE];
@@ -220,7 +222,7 @@ void mp3_init(uint8_t *buffer)
     const char *directory_path = "1:";
     f_opendir(&directory, directory_path);
 
-    LOG_INFO("\n--------------------------------------\n");
+    printf("-------------------------------------------\n");
     LOG_INFO("Reading SD directory:\n");
 
     // Loop through every file in the directory
@@ -281,19 +283,17 @@ void mp3_init(uint8_t *buffer)
                     //                                                     TrackList[TrackListSize]->short_name,
                     //                                                     file_info.fsize);
 
-                    mp3_open_file(TrackList[TrackListSize]->full_name);
-                    mp3_get_track_info(TrackList[TrackListSize], buffer);
-                    // LOG_INFO("%s | %s | %s\n",  TrackList[TrackListSize]->artist,
-                    //                             TrackList[TrackListSize]->title, 
-                    //                             TrackList[TrackListSize]->genre);
-                    mp3_close_file();
                     TrackListSize++;
+                    mp3_open_file(TrackList[TrackListSize-1]->full_name);
+                    mp3_get_track_info(TrackList[TrackListSize-1], buffer, size);
+                    // LOG_INFO("%s | %s | %s\n",  TrackList[TrackListSize-1]->artist,
+                    //                             TrackList[TrackListSize-1]->title, 
+                    //                             TrackList[TrackListSize-1]->genre);
+                    mp3_close_file();
                 }
             }
         }
     }
-
-    LOG_INFO("--------------------------------------\n");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -306,12 +306,24 @@ void mp3_init(uint8_t *buffer)
 //     safe_strcpy(short_name, full_name, full_name_length-3);
 // }
 
+bool mp3_open_file_by_index(uint8_t index)
+{
+    if (index >= TrackListSize)
+    {
+        LOG_ERROR("[mp3_open_file_by_index] Can't open track %i, not in TrackList.\n", index);
+        return false;
+    }
+    else
+    {
+        return mp3_open_file(TrackList[index]->full_name);
+    }
+}
+
 bool mp3_open_file(char *name)
 {
     if (current_song.file_is_open)
     {
-        // LOG_ERROR("[mp3_open_file] A file is already open: %s, cannot open: %s\n",  current_song.file_name.full_name, 
-        //                                                                             file_name->full_name);
+        LOG_ERROR("[mp3_open_file] A file is already open: %s, cannot open: %s\n", current_song.name, name);
         return false;
     }
 
@@ -328,6 +340,23 @@ bool mp3_open_file(char *name)
         current_song.name = name;
         current_song.file_is_open = true;
         LOG_STATUS("[mp3_open_file] %s successfully opened.\n", current_song.name);
+
+        // Store the track number
+        bool found = false;
+        for (int i=0; i<TrackListSize; i++)
+        {
+            if (strcmp(TrackList[i]->full_name, name) == 0)
+            {
+                CurrentTrackNumber = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            LOG_ERROR("[mp3_open_file] Opened file but could not find its track number in TrackList: %s\n", name);
+        }
+
         return true;
     }
     else
@@ -390,6 +419,9 @@ bool mp3_restart_file(void)
 
 bool mp3_read_segment(uint8_t *buffer, uint32_t segment_size, uint32_t *current_segment_size)
 {
+    // Can't read if nothing is open
+    if (!current_song.file_is_open) return false;
+
     current_song.file_status = f_read(&current_song.mp3_file, buffer, segment_size, (UINT*)current_segment_size);
     if (current_song.file_status != FR_OK)
     {
@@ -405,6 +437,9 @@ bool mp3_read_segment(uint8_t *buffer, uint32_t segment_size, uint32_t *current_
 
 static bool mp3_go_to_offset(uint32_t offset)
 {
+    // Can't read if nothing is open
+    if (!current_song.file_is_open) return false;
+
     current_song.file_status = f_lseek(&current_song.mp3_file, offset);
     if (FR_OK != current_song.file_status)
     {
@@ -528,7 +563,17 @@ void mp3_set_direction(seek_direction_E direction)
     current_song.direction = direction;
 }
 
-void mp3_set_current_track(uint8_t index)
+#if 0
+void mp3_set_next_track(uint8_t index)
 {
-    CurrentTrackNumber = MIN(CurrentTrackNumber, TrackListSize);
+    if (index < TrackListSize)
+    {
+        CurrentTrackNumber = index;
+        LOG_STATUS("[mp3_set_next_track] Next track is set to: %i, %s\n", index, TrackList[index]->full_name);
+    }
+    else
+    {
+        LOG_ERROR("[mp3_set_next_track] Can't set the next track to: %i, not in TrackList.\n", index);
+    }
 }
+#endif

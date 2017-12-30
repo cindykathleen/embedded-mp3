@@ -6,11 +6,7 @@ class GpioOutput : public Gpio
 {
 public:
 
-	GpioOutput(gpio_port_t port, gpio_pin_t pin, bool start_value=false) : Gpio(port, pin, OUTPUT)
-	{
-        SetValue(start_value);
-		LastValue = start_value;
-	}
+    GpioOutput(gpio_port_t port, uint8_t pin, bool start_value=false);
 
     // Sets value high or low
     void SetValue(bool value);

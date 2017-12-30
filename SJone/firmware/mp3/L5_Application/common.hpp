@@ -14,7 +14,9 @@
 #include "utilities.hpp"
 
 
+// Defines
 #define MP3_TESTING 1
+// #define LOG_LEVEL   1
 
 // Helper macros for size comparison or related
 #define MAX(a, b)   ((a > b) ? (a) : (b))
@@ -24,10 +26,13 @@
 #define DELAY_MS(x) (vTaskDelay(x / portTICK_PERIOD_MS))
 #define TICK_MS(x)  (x / portTICK_PERIOD_MS)
 #define MAX_DELAY   (portMAX_DELAY)
+#define NO_DELAY    (0)
 
 // Buffer max limits
 #define MAX_TRACK_BUFLEN     (32)
-#define MP3_SEGMENT_SIZE     (1024)
+#define MP3_SEGMENT_SIZE     (512)
+
+#define INVALID_BUTTON       (0xFF)
 
 // Individual bits of WatchdogEventGroup, mapping to each task that is monitored
 #define WATCHDOG_DECODER_BIT (1 << 0)
@@ -39,6 +44,19 @@
 #define LOG_INFO(message, ...)   (log_to_server(PACKET_TYPE_INFO,   message, ## __VA_ARGS__))
 #define LOG_ERROR(message, ...)  (log_to_server(PACKET_TYPE_ERROR,  message, ## __VA_ARGS__))
 #define LOG_STATUS(message, ...) (log_to_server(PACKET_TYPE_STATUS, message, ## __VA_ARGS__))
+
+// Pin numbers for buttons
+#define BUTTON0_PIN (0)
+#define BUTTON1_PIN (1)
+#define BUTTON2_PIN (2)
+#define BUTTON3_PIN (3)
+#define BUTTON4_PIN (4)
+// Pin number for DREQ, treated as a button because it needs GPIO interrupt
+#define DREQ_PIN    (5)
+// // Since the pin numbers start from 0 and are contiguous we can check if a button is valid by (num < NUM_BUTTONS)
+// #define NUM_BUTTONS (6)
+// For debouncing buttons: if the last trigger was longer than this minimum, then accept it
+#define MIN_TIME_GAP (200 / portTICK_PERIOD_MS)
 
 // Enum to specify which screen is currently being displayed
 typedef enum
@@ -71,6 +89,11 @@ enum
 // When the next button is pressed, DecoderTask has to change tracks and then LCDTask has to update screen in this order
 // LCDTask takes and DecoderTask gives
 extern SemaphoreHandle_t NextSemaphore;
+
+extern QueueHandle_t SelectQueue;
+
+// Semaphore for waiting on DREQ
+extern SemaphoreHandle_t DREQSemaphore;
 
 // Shared screen variable, needs a mutex
 extern screen_E CurrentScreen;

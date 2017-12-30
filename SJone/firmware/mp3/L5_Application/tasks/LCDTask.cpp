@@ -14,23 +14,6 @@
 screen_E CurrentScreen;
 SemaphoreHandle_t ScreenMutex;
 
-// static void printSongs(uint8_t startIndex) 
-// {
-//     uint8_t line = 0;
-//     for (int i = startIndex; i < (startIndex+4); ++i) {
-//         lcd_set_cursor(1, line);
-//         uint32_t len = MIN(strlen(track_list[i]->short_name), 20);
-
-//         char *short_name = track_list_get_short_name(i);
-//         if (short_name)
-//         {
-//             printf("Short: %s\n", short_name);
-//             sendString(short_name, len);
-//             line++;            
-//         }
-//     }
-// }
-
 static void PrintScreen(uint8_t track_num, screen_E screen)
 {
     const uint8_t track_list_size = mp3_get_track_list_size();
@@ -49,7 +32,7 @@ static void PrintScreen(uint8_t track_num, screen_E screen)
                 track = mp3_get_track_by_number(track_num);
                 if (!track)
                 {
-                    LOG_ERROR("Track #%d returned NULL!\n", track_num);
+                    LOG_ERROR("[PrintScreen] Could not find track #%d\n", track_num);
                     return;
                 }
                 if (!track->short_name)
@@ -76,8 +59,16 @@ static void PrintScreen(uint8_t track_num, screen_E screen)
 
             // TODO : Check which way the rows are oriented
             track = mp3_get_track_by_number(track_num);
+            if (!track)
+            {
+                LOG_ERROR("[PrintScreen] Could not find track #%d\n", track_num);
+                return;
+            }
 
 #if MP3_TESTING
+            if (!track->title)  { LOG_ERROR("[PrintScreen] Could not find track title #%d\n",  track_num); return; }
+            if (!track->artist) { LOG_ERROR("[PrintScreen] Could not find track artist #%d\n", track_num); return; }
+            if (!track->genre)  { LOG_ERROR("[PrintScreen] Could not find track genre #%d\n",  track_num); return; }
             printf("%s\n", track->title);
             printf("%s\n", track->artist);
             printf("%s\n", track->genre);
@@ -109,11 +100,11 @@ static void HandleButtonTriggers(void)
     static const uint8_t track_list_size = mp3_get_track_list_size();
 
     // Start off with song 0
-    static int track_num = mp3_get_current_track_num();
+    static int track_num = 0;
 
     // Check if any buttons were pressed
-    uint8_t triggered_button = 0xFF;
-    xQueueReceive(LCDButtonQueue, &triggered_button, 0);
+    uint8_t triggered_button = INVALID_BUTTON;
+    xQueueReceive(LCDButtonQueue, &triggered_button, MAX_DELAY);
 
     switch (CurrentScreen)
     {
@@ -186,13 +177,11 @@ static void HandleButtonTriggers(void)
                 // Button 2 : Select song and change screens
                 case BUTTON_SELECT:
 
-                    // Change screen
-                    xSemaphoreTake(ScreenMutex, MAX_DELAY);
-                    {
-                        CurrentScreen = SCREEN_PLAYING;
-                    }
-                    xSemaphoreGive(ScreenMutex);
-                    PrintScreen(track_num, CurrentScreen);
+                    // Print new screen, before variable changes in Decoder Task
+                    PrintScreen((uint8_t)track_num, SCREEN_PLAYING);
+
+                    // Send the track number to DecoderTask
+                    xQueueSend(SelectQueue, &track_num, MAX_DELAY);
                     break;
 
                 // Should never reach this state
