@@ -47,9 +47,10 @@ CFLAGS = -mcpu=cortex-m3 						\
 	-I"L3_Utils" 								\
 	-I"L4_IO" 									\
 	-I"L5_Application" 							\
-	-I"L5_Application/drivers" 					\
 	-I"L5_Application/app" 						\
-	-I"L5_Application/source" 					\
+	-I"L5_Application/base" 					\
+	-I"L5_Application/drivers" 					\
+	-I"L5_Application/tasks" 					\
 	-I"$(DBC_DIR)" 								\
 	-MMD -MP -c
 

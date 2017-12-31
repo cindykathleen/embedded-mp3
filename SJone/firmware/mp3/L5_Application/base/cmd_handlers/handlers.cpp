@@ -39,7 +39,6 @@
 #include "nrf_stream.hpp"
 
 #include "io.hpp"
-#include "shared_handles.h"
 #include "scheduler_task.hpp"
 
 #include "c_tlm_stream.h"
@@ -664,6 +663,15 @@ CMD_HANDLER_FUNC(telemetryHandler)
     return true;
 }
 #endif
+
+/**
+ * Enumeration of shared handles
+ * You can add additional IDs here to use addSharedHandle() and getSharedHandle() API
+ */
+enum {
+    shared_SensorQueue,    ///< Shared handle used by examples (producer and consumer tasks)
+    shared_learnSemaphore, ///< Terminal command gives this semaphore to remoteTask (IR sensor task)
+};
 
 CMD_HANDLER_FUNC(learnIrHandler)
 {
