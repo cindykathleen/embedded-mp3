@@ -1,8 +1,10 @@
+from collections import deque
 
 """
     @name    : diagnostics
     @purpose : API to parse diagnostic packets
 """
+
 
 class DiagnosticPacket():
 
@@ -22,3 +24,28 @@ class DiagnosticPacket():
 
     def print(self):
         print("[{}] {}".format(self.type, self.payload))
+
+
+class DiagPacketStruct():
+
+    def __init__(self, max=100):
+        self.max   = max
+        self.size  = 0
+        self.queue = deque()
+
+    def push_back(packet):
+        if type(packet) is not DiagnosticPacket:
+            raise Exception("Input is not of type DiagnosticPacket")
+        else:
+            self.queue.append(packet)
+            self.size += 1
+            # Get rid of oldest packets
+            if self.size == self.max:
+                self.queue.pop_left()
+
+    def get_back(self):
+        """ Get the last item in the queue """
+        return list(self.queue)[:-1]
+
+    def get_index(self, index):
+        return list(self.queue)[index]
