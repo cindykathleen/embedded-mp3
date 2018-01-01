@@ -6,3 +6,6 @@
 *.map
 *.bin
 firmware/mp3/_can_dbc/*
+__pycache__/
+WiFi/jp/esp32/build/*
+credentials.hpp

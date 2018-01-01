@@ -1,103 +1,100 @@
 import socket           # Sockets
 import sys              # Flush
 import logging          # Print debug
-import json             # Writing data
-import os.path          # Checking file path exists
-import datetime         # Get current date + time
-import pprint           # Pretty print
 import time
 import http.server
-import socketserver
 import threading
+import os
 
-# Default address
-PORT = 11111
-IP   = "0.0.0.0"
+from commands import send_command_packet
+from diagnostics import DiagnosticPacket
+
+# Constant parameters
+HTTP_PORT   = 8000
+SERVER_PORT = 7000
+CLIENT_PORT = 5000
+IP          = "0.0.0.0"
+SERVER_IP   = "192.168.1.229"
+CLIENT_IP   = "192.168.1.250"
 
 # Set logging level
 logging.basicConfig(level=logging.DEBUG, format='(%(threadName)s) %(message)s',)
 
-
-""" Opens a UDP socket in server mode """
-class UdpServer():
-
-    def __init__(self, port=PORT, ip=IP):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(1)
-        self.port = port
-        self.ip   = ip
-        self.sock.bind((self.ip, self.port))
-        # logging.debug("UDP Socket initialized.")
-        # logging.debug("Listening on port: %i", self.port)
-        # sys.stdout.flush()
-
-    def listen(self):
-        try:
-            while True:
-                data, addr = self.sock.recvfrom(4096)
-                if data:
-                    logging.debug("Packet: %s" % data)
-                    sys.stdout.flush()
-                else:
-                    break
-        except socket.timeout as e:
-            pass
-        except Exception as e:
-            raise
-
-    def close(self):
-        logging.debug("Closing socket: %i", self.port)
-        sys.stdout.flush()
-        self.sock.close()
-
-
-class UdpClient():
-
-    def __init__(self, ip, port):
-        self.ip   = ip
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setblocking(0)
-        # self.sock.bind(("192.168.1.250", 11111))
-
-    def send(self, message):
-        print(self.sock.sendto(message, (self.ip, self.port)))
-
-    def close(self):
-        self.sock.close()
-
+# Global variable
+PENDING_EXIT = False
 
 # Thread 1
 def host_http_server():
     logging.debug("Creating HTTP Server...")
     handler = http.server.SimpleHTTPRequestHandler
-    httpd   = socketserver.TCPServer(("", PORT), handler)
+    httpd   = socketserver.TCPServer(("localhost", HTTP_PORT), handler)
     # Start running
-    logging.debug("Serving on port: %i", PORT)
+    logging.debug("Serving on port: %i", HTTP_PORT)
     sys.stdout.flush()
     httpd.serve_forever()
 
+
 # Thread 2
-def diagnostic_port():
-    logging.debug("Creating UDP port...")
-    udp_server = UdpServer(6666, "192.168.1.250")
+def diagnostic_task():
+    # Initialize server socket
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((SERVER_IP, SERVER_PORT))
+    server_socket.listen(10)
+    logging.debug("Created TCP server")
+
+    # Main loop
     while True:
-        udp_server.listen()
+        if PENDING_EXIT:
+            return
+
+        # Accept a connection and receive
+        client, addr = server_socket.accept()
+        packet = client.recv(1024)
+        packet = DiagnosticPacket(packet)
+        packet.print()
+        client.close()
+
 
 # Thread 3
-def command_port():
-    udp_client = UdpClient("192.168.1.250", 5555)
-    logging.debug("Created client")
-    while True:
-        logging.debug("Sending...")
-        udp_client.send(str.encode("pingpong"))
-        time.sleep(0.5)
+def command_task():
 
+    global PENDING_EXIT
+
+    # Main loop
+    while True:
+        if PENDING_EXIT:
+            return
+
+        # Create socket
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Connect to server, ignore errors that don't need to be handled
+        while True:
+            try:
+                client_socket.connect((CLIENT_IP, CLIENT_PORT))
+                break
+            except ConnectionRefusedError:
+                pass
+            except TimeoutError:
+                pass
+
+        # Send a packet
+        packet = send_command_packet("PACKET_TYPE_COMMAND_READ", "PACKET_OPCODE_GET_STATUS", 0, 0)
+        print(str.encode(packet))
+        client_socket.send(str.encode(packet))
+        client_socket.close()
+        time.sleep(1)
+
+
+# Main thread
 def main():
+
+    global PENDING_EXIT
+
     threads = [
-        threading.Thread(target=host_http_server),
-        threading.Thread(target=diagnostic_port),
-        threading.Thread(target=command_port)
+        # threading.Thread(target=host_http_server),
+        threading.Thread(target=diagnostic_task),
+        threading.Thread(target=command_task)
     ]
 
     for thread in threads:
@@ -109,9 +106,11 @@ def main():
         while threading.active_count() > 0:
             time.sleep(0.001)
     except KeyboardInterrupt:
+        PENDING_EXIT = True
         logging.debug("Received KeyboardInterrupt...")
         logging.debug("Closing all threads.")
-        sys.exit()
+        os._exit(0)
+
 
 if __name__ == "__main__":
     main()
