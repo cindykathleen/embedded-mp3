@@ -15,21 +15,25 @@
 
 int main(void)
 {
+    // TODO : Move non-global queues to application headers
+    
     // All initialization functions in order
     // Init_Uart();            // UART driver, queues
     Init_ButtonTask();      // Queues, GPIOs, interrupts
     Init_DecoderTask();     // Decoder driver, track list, SD card, semaphores
     Init_LCDTask();         // LCD driver, screen, mutex
+    Init_VolumeTask();      // Queues, ADC
     // Init_TxTask();          // Queue
     // Init_RxTask();          // Queue
 
     // Low priority tasks
-    CREATE_TASK_LOW(DecoderTask    , 4096);    // Regular operation
+    CREATE_TASK_LOW(DecoderTask    , 4096);     // Regular operation
     // CREATE_TASK_LOW(TxTask         , 1024);    // Regular operation
 
     // Medium priority tasks
-    CREATE_TASK_MED(ButtonTask     , 1024);    // Serviced immediately from GPIO interrupt
-    CREATE_TASK_MED(LCDTask        , 1024);    // Serviced immediately when receiving a queue from ButtonTask 
+    CREATE_TASK_MED(ButtonTask     , 1024);     // Serviced immediately from GPIO interrupt
+    CREATE_TASK_MED(LCDTask        , 1024);     // Serviced immediately when receiving a queue from ButtonTask 
+    CREATE_TASK_MED(VolumeTask     , 1024);     // Serviced immediately from ADC interrupt
     // CREATE_TASK_MED(RxTask         , 1024);    // Serviced immediately from UART interrupt
 
     // High priority tasks

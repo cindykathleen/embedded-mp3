@@ -88,5 +88,10 @@ void DMATask(void *p);
 //                in an undesired state.  Periodically checks once per second.
 void WatchdogTask(void *p);
 
+
 void Init_LCDTask(void);
 void LCDTask(void *p);
+
+
+void Init_VolumeTask(void);
+void VolumeTask(void *p);

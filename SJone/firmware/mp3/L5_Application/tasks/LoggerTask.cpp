@@ -1,0 +1,1 @@
+// Log status messages as diagnostic

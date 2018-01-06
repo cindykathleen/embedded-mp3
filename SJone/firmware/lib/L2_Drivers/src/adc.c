@@ -40,16 +40,16 @@ SemaphoreHandle_t g_adc_mutex = 0;
  * This is the ADC interrupt mapped to startup.cpp IRQ name.
  * This is called by the CPU core when ADC interrupt occurs.
  */
-void ADC_IRQHandler(void)
-{
-    const uint16_t twelve_bits = 0x0FFF;
-    BaseType_t switch_required = 0;
+// void ADC_IRQHandler(void)
+// {
+//     const uint16_t twelve_bits = 0x0FFF;
+//     BaseType_t switch_required = 0;
 
-    uint16_t result = (LPC_ADC->ADGDR >> 4) & twelve_bits;
-    xQueueSendFromISR(g_adc_result_queue, &result, &switch_required);
+//     uint16_t result = (LPC_ADC->ADGDR >> 4) & twelve_bits;
+//     xQueueSendFromISR(g_adc_result_queue, &result, &switch_required);
 
-    portEND_SWITCHING_ISR(switch_required);
-}
+//     portEND_SWITCHING_ISR(switch_required);
+// }
 
 void adc0_init()
 {

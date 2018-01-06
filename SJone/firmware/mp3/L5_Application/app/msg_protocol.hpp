@@ -3,7 +3,7 @@
 #include "common.hpp"
 
 
-// Make size of diagnostic packet payload
+// Max size of diagnostic packet payload
 #define MAX_PACKET_SIZE (128)
 
 // Denotes the type of the packet
