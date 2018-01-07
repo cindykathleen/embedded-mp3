@@ -1,0 +1,110 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <!-- Jquery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css" integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js" integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4" crossorigin="anonymous"></script>
+    <!-- My scripts -->
+    <script type=text/javascript>
+      $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+    </script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Title -->
+    <div align="center" style="font-family: 'Open Sans', sans-serif;">
+        <h1> MP3 Player </h1>
+    </div>
+
+    <div align="center">
+        <button id="Play"  type="button" class="btn btn-dark"> Play  </button>
+        <button id="Pause" type="button" class="btn btn-dark"> Pause </button>
+        <button id="Stop"  type="button" class="btn btn-dark"> Stop  </button>
+        <button id="Prev"  type="button" class="btn btn-dark"> Prev  </button>
+        <button id="Next"  type="button" class="btn btn-dark"> Next  </button>
+    </div>
+
+    <div id="terminal" align="center" style="box-sizing: border-box;">
+    </div>
+
+    <script>
+
+        function send_command_packet() {
+
+            $.ajax({
+                type    : "POST",
+                url     : "/play",
+                success : function(data, status, request) {
+                            status_url = request.getResponseHeader("Location");
+                            update_terminal(status_url, 0);
+                        },
+                error   : function() {
+                            alert("Unexpected error???");
+                        }
+            });
+
+        }
+
+        // Test function
+        function update_terminal(status_url, elapsed) {
+
+            // var new_row = document.createElement('div');
+            // new_row.innerHTML = data.result;
+            // document.getElementById("terminal").appendChild(new_row);
+
+            $.getJSON(status_url, function(data) {
+                switch (data['state'])
+                {
+                    case "DONE":
+                        var status = 0;
+                        var div = $('<div></div>');
+                        status = data['status'];
+                        div.innerHTML = status;
+                        $("#terminal").append(div);
+                        console.log(status);
+                        break;
+                    case "TIMED_OUT":
+                        console.log("Timed out");
+                        break;
+                    case "STANDBY": // No break
+                    case "CONNECTING":
+                        console.log("Elapsed:", elapsed, "Restarting in 2 seconds...");
+                        setTimeout(function() {
+                            update_terminal(status_url, elapsed + 2);
+                        }, 2000);
+                        break;
+                    default:
+                        console.log("Invalid state:", data['state']);
+                        break;
+                }
+            });
+        }
+
+        // On click call update
+        $('button#Play').bind('click', send_command_packet);
+
+        // const interval = 5 *1000;
+
+        // // Call update on interval
+        // setInterval(function() {
+        //     $.getJSON($SCRIPT_ROOT + '/_update', {
+        //     }, function(data) {
+        //         var new_row = document.createElement('div');
+        //         new_row.innerHTML = data.result;
+        //         document.getElementById("terminal").appendChild(new_row);
+        //     })
+        // },
+        // interval);
+
+    </script>
+
+</body>
+
+</html>
