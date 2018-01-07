@@ -1,26 +1,35 @@
 from app import app
 from flask import render_template, jsonify, url_for, request
+import atexit
+import signal
+import sys
+from celery.task.control import revoke
 import tasks
 
 
-# # Create diagnostic task at startup
-# @app.before_first_request
-# def startup():
-#     task = tasks.diagnostic_task.apply_async()
-#     return jsonify({}), 202, { "Location" : url_for("diagnostic_task_status", task_id=task.id) }
+# Store task ID to be able to terminate it
+diagnostic_task_id = None
+
+# Create diagnostic task at startup
+@app.before_first_request
+def startup():
+    global diagnostic_task_id
+    task = tasks.diagnostic_task.apply_async()
+    diagnostic_task_id = task.id
 
 
-# # Callback for updating the diagnostic task status
-# @app.route('/diagnostic_status/<task_id>')
-# def diagnostic_task_status(task_id):
-#     task = tasks.diagnostic_task.AsyncResult(task_id)
-#     return jsonify(task.info)
+# Callback for updating the diagnostic task status
+@app.route('/diagnostic_status')
+def diagnostic_task_status():
+    task = tasks.diagnostic_task.AsyncResult(diagnostic_task_id)
+    print(task.info)
+    return jsonify({})
 
 
 # Callback for a button press
-@app.route("/play", methods=["POST"])
-def send_command():
-    task = tasks.command_task.apply_async()
+@app.route("/command/<button>", methods=["POST"])
+def send_command(button):
+    task = tasks.command_task.apply_async([button])
     return jsonify({}), 202, { "Location" : url_for("command_task_status", task_id=task.id) }
 
 
@@ -37,12 +46,23 @@ def command_task_status(task_id):
     return jsonify(response)
 
 
+# Home page
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'GET':
         return render_template('index.html')
-    return redirect(url_for('index'))
+    elif request.method == 'POST':
+        return redirect(url_for('index'))
 
 
+# Close diagnostic task when server terminates
+def signal_handler(signal, frame):
+    print("Exiting diagnostic task...")
+    revoke(diagnostic_task_id, terminate=True)
+    sys.exit(0)
+
+
+# Main program
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal_handler)
     app.run(debug=True)

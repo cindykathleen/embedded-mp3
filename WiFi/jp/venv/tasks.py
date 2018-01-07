@@ -4,8 +4,11 @@ from diagnostics import DiagnosticPacket
 from commands import create_command_packet
 from make_celery import make_celery
 from app import app, packet_list
-from celery import Celery
+import redis
 
+
+# Redis handle
+red = redis.StrictRedis(host="localhost", port=6379, db=0)
 
 # Constant parameters
 HTTP_PORT   = 8000
@@ -50,6 +53,7 @@ def diagnostic_task(self):
                 # Create packet and add to packet list
                 packet = DiagnosticPacket(packet)
                 packet_list.push_back(packet)
+                red.set(count, packet)
 
                 count += 1
                 self.update_state(state = "LISTENING",
@@ -77,11 +81,17 @@ def diagnostic_task(self):
 
 
 @celery.task(bind=True)
-def command_task(self):
+def command_task(self, command):
     """
     """
+
+    # Number of retries before giving up
     RETRIES = 5
     retries = 0
+
+    # Create command packet
+    # TODO : Find out how to grab values from page (slider)
+    packet = create_command_packet(command, 0, 0)
 
     print("STARTING")
     self.update_state(state = "STANDBY",
@@ -108,9 +118,7 @@ def command_task(self):
             else:
                 pass
 
-
     # Send a packet
-    packet = create_command_packet("PACKET_TYPE_COMMAND_READ", "PACKET_OPCODE_GET_STATUS", 0, 0)
     client_socket.send(str.encode(packet))
     client_socket.close()
     self.update_state(state = "DONE",

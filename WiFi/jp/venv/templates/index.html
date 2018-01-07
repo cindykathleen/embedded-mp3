@@ -14,58 +14,109 @@
     </script>
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css?family=Open+Sans:300" rel="stylesheet">
+
+    <style>
+        #mid {
+            position: relative;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+    </style>
 </head>
 
 <body>
 
+    <br><br><br>
+
     <!-- Title -->
-    <div align="center" style="font-family: 'Open Sans', sans-serif;">
-        <h1> MP3 Player </h1>
+    <div class="row">
+        <div class="col-3"></div>
+        <div class="col-6">
+            <div class="card">
+                <div class="card-header" align="center">
+                    <h1 style="font-family: 'Open Sans', sans-serif;"> 
+                        MP3 Player 
+                    </h1>
+                </div>
+                <div class="card-block" style="height:200px;">
+                    <div id="mid" align="center">
+                        <button id="Play"  type="button" class="btn btn-dark"> Play  </button>
+                        <button id="Pause" type="button" class="btn btn-dark"> Pause </button>
+                        <button id="Stop"  type="button" class="btn btn-dark"> Stop  </button>
+                        <button id="Prev"  type="button" class="btn btn-dark"> Prev  </button>
+                        <button id="Next"  type="button" class="btn btn-dark"> Next  </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-3"></div>
     </div>
 
-    <div align="center">
-        <button id="Play"  type="button" class="btn btn-dark"> Play  </button>
-        <button id="Pause" type="button" class="btn btn-dark"> Pause </button>
-        <button id="Stop"  type="button" class="btn btn-dark"> Stop  </button>
-        <button id="Prev"  type="button" class="btn btn-dark"> Prev  </button>
-        <button id="Next"  type="button" class="btn btn-dark"> Next  </button>
-    </div>
+    <br><br><br>
+
 
     <div id="terminal" align="center" style="box-sizing: border-box;">
     </div>
 
     <script>
 
-        function send_command_packet() {
+        // Buttons dictionary
+        // TODO : Maybe just remove this middleman var
+        var buttons = {
+            PLAY  : "PACKET_OPCODE_SET_PLAY_CURRENT",
+            PAUSE : "PACKET_OPCODE_SET_PAUSE",
+            STOP  : "PACKET_OPCODE_SET_STOP",
+            PREV  : "PACKET_OPCODE_SET_PLAY_PREV",
+            NEXT  : "PACKET_OPCODE_SET_PLAY_NEXT",
+        };
 
-            $.ajax({
-                type    : "POST",
-                url     : "/play",
-                success : function(data, status, request) {
-                            status_url = request.getResponseHeader("Location");
-                            update_terminal(status_url, 0);
-                        },
-                error   : function() {
-                            alert("Unexpected error???");
-                        }
+        function read_diagnostic_packet() {
+
+            // $.ajax({
+            //     type    : "GET",
+            //     url     : "/diagnostic_status"
+            //     success :
+            //     error   :
+            // })
+
+            $.getJSON("/diagnostic_status", function(data) {
+                var new_div = document.createElement('div');
+                new_div.innerHTML = data;
+                $("#terminal").append(new_div);
             });
 
         }
 
-        // Test function
+        // Function to call Flask callback
+        function send_command_packet(button) {
+
+            if (buttons.hasOwnProperty(button)) {
+                $.ajax({
+                    type    : "POST",
+                    url     : "/command/" + buttons[button],
+                    success : function(data, status, request) {
+                                status_url = request.getResponseHeader("Location");
+                                update_terminal(status_url, 0);
+                            },
+                    error   : function() {
+                                alert("Unexpected error???");
+                            }
+                });
+            }
+            else {
+                console.log("Invalid button received:", button);
+            }
+        }
+
+        // Function to create div
         function update_terminal(status_url, elapsed) {
 
-            // var new_row = document.createElement('div');
-            // new_row.innerHTML = data.result;
-            // document.getElementById("terminal").appendChild(new_row);
-
             $.getJSON(status_url, function(data) {
-                switch (data['state'])
+                switch (data['state']) 
                 {
                     case "DONE":
-                        var status = 0;
                         var div = $('<div></div>');
-                        status = data['status'];
+                        var status = data['status'];
                         div.innerHTML = status;
                         $("#terminal").append(div);
                         console.log(status);
@@ -73,7 +124,8 @@
                     case "TIMED_OUT":
                         console.log("Timed out");
                         break;
-                    case "STANDBY": // No break
+                    case "STANDBY": 
+                        // No break
                     case "CONNECTING":
                         console.log("Elapsed:", elapsed, "Restarting in 2 seconds...");
                         setTimeout(function() {
@@ -88,20 +140,12 @@
         }
 
         // On click call update
-        $('button#Play').bind('click', send_command_packet);
-
-        // const interval = 5 *1000;
-
-        // // Call update on interval
-        // setInterval(function() {
-        //     $.getJSON($SCRIPT_ROOT + '/_update', {
-        //     }, function(data) {
-        //         var new_row = document.createElement('div');
-        //         new_row.innerHTML = data.result;
-        //         document.getElementById("terminal").appendChild(new_row);
-        //     })
-        // },
-        // interval);
+        $("button#Play").bind("click",  function() { send_command_packet("PLAY");  });
+        $("button#Pause").bind("click", function() { send_command_packet("PAUSE"); });
+        $("button#Stop").bind("click",  function() { send_command_packet("STOP");  });
+        $("button#Prev").bind("click",  function() { send_command_packet("PREV");  });
+        $("button#Next").bind("click",  function() { read_diagnostic_packet(); });
+        //{ send_command_packet("NEXT");  });
 
     </script>
 
