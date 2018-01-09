@@ -1,4 +1,4 @@
-from app import app
+from app import app, red
 from flask import render_template, jsonify, url_for, request
 import atexit
 import signal
@@ -14,16 +14,28 @@ diagnostic_task_id = None
 @app.before_first_request
 def startup():
     global diagnostic_task_id
-    task = tasks.diagnostic_task.apply_async()
-    diagnostic_task_id = task.id
+    # Sanity check, do not make a second task
+    if diagnostic_task_id == None:
+        task = tasks.diagnostic_task.apply_async()
+        diagnostic_task_id = task.id
 
 
 # Callback for updating the diagnostic task status
 @app.route('/diagnostic_status')
 def diagnostic_task_status():
+    print("-"*50)
+    print(diagnostic_task_id)
+    print("-"*50)
     task = tasks.diagnostic_task.AsyncResult(diagnostic_task_id)
-    print(task.info)
-    return jsonify({})
+    response = {
+        "status"  : task.info.get("status"),
+        "count"   : task.info.get("count"),
+        "message" : task.info.get("message"),
+        "test"    : red.get("count").decode(),
+        "error"   : task.info.get("error"),
+    }
+    print(response)
+    return jsonify(response)
 
 
 # Callback for a button press

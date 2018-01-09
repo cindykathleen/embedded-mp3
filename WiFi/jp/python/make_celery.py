@@ -3,8 +3,8 @@ from celery import Celery
 
 def make_celery(app):
     celery = Celery(app.name, 
-                    broker=app.config['BROKER_URL'], 
-                    backend=app.config['CELERY_RESULT_BACKEND'])
+                    broker  = app.config['CELERY_BROKER_URL'], 
+                    backend = app.config['CELERY_RESULT_BACKEND'])
     celery.conf.update(app.config)
     TaskBase = celery.Task
     class ContextTask(TaskBase):

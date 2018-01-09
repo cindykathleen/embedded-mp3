@@ -9,17 +9,17 @@ from collections import deque
 class DiagnosticPacket():
 
     def __init__(self, buffer):
-        self.type    = buffer[0]
-        self.length  = buffer[1]
-        self.payload = buffer[2:]
+        self.type    = str(buffer[0])
+        self.length  = str(buffer[1])
+        self.payload = str(buffer[2:])
 
-    def type(self):
+    def get_type(self):
         return self.type
 
-    def length(self):
+    def get_length(self):
         return self.length
 
-    def payload(self):
+    def get_payload(self):
         return self.payload
 
     def print_packet(self):

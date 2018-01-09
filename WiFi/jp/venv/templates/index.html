@@ -4,10 +4,10 @@
 <head>
     <!-- Jquery -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-    <!-- Bootstrap -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css" integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js" integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4" crossorigin="anonymous"></script>
+    <!-- Material CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
+
     <!-- My scripts -->
     <script type=text/javascript>
       $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
@@ -21,6 +21,35 @@
             top: 50%;
             transform: translateY(-50%);
         }
+        .terminal_row_10 {
+            width: 10%;
+            text-align:center;
+        }
+        .terminal_row_20 {
+            width: 20%;
+            text-align:center;
+        }
+        .terminal_row_25 {
+            width: 25%;
+            text-align:center;
+        }
+        .terminal_row_33 {
+            width: 33.33%;
+            text-align:center;
+        }
+        .terminal_row_60 {
+            width: 60%;
+            text-align:center;
+        }
+        .mid-button {
+            margin-left : auto;
+            margin-right: auto;
+        }
+        .button-row {
+            width   : 100%;
+            height  : 33.33%;
+            /*display : inline-block;*/
+        }
     </style>
 </head>
 
@@ -28,34 +57,64 @@
 
     <br><br><br>
 
-    <!-- Title -->
-    <div class="row">
-        <div class="col-3"></div>
-        <div class="col-6">
-            <div class="card">
-                <div class="card-header" align="center">
+    <div class="container">
+        <div class="row">
+            <div class="card" style="width:100%">
+                <div class="card-title" align="center">
                     <h1 style="font-family: 'Open Sans', sans-serif;"> 
                         MP3 Player 
                     </h1>
                 </div>
-                <div class="card-block" style="height:200px;">
-                    <div id="mid" align="center">
-                        <button id="Play"  type="button" class="btn btn-dark"> Play  </button>
-                        <button id="Pause" type="button" class="btn btn-dark"> Pause </button>
-                        <button id="Stop"  type="button" class="btn btn-dark"> Stop  </button>
-                        <button id="Prev"  type="button" class="btn btn-dark"> Prev  </button>
-                        <button id="Next"  type="button" class="btn btn-dark"> Next  </button>
+                <div class="card-content" style="height:300px;">
+                    <div class="center-align button-row">
+                        <a id="Play"  class="waves-effect btn mid-button"> Play  </a>
+                        <a id="Pause" class="waves-effect btn mid-button"> Pause </a>
+                        <a id="Stop"  class="waves-effect btn mid-button"> Stop  </a>
+                        <a id="Prev"  class="waves-effect btn mid-button"> Prev  </a>
+                        <a id="Next"  class="waves-effect btn mid-button"> Next  </a>
+                    </div>
+                    <div class="center-align button-row">
+                        <a id="" class="waves-effect btn mid-button"> Get Status       </a>
+                        <a id="" class="waves-effect btn mid-button"> Get Sample Rate  </a>
+                        <a id="" class="waves-effect btn mid-button"> Get Decode Time  </a>
+                    </div>
+                    <div class="center-align button-row">
+                        <a id="" class="waves-effect btn mid-button"> Get Header Info  </a>
+                        <a id="" class="waves-effect btn mid-button"> Bit Rate         </a>
+                        <a id="" class="waves-effect btn mid-button"> Reset            </a>
                     </div>
                 </div>
-            </div>
+
+<!--                 <input type="range" min="1" max="100" step="1" value="15">
+                <form action="#">
+                    <p class="range-field">
+                      <input type="range" id="test5" min="0" max="100" />
+                    </p>
+                </form>
+ -->        </div>
         </div>
-        <div class="col-3"></div>
     </div>
 
     <br><br><br>
 
 
-    <div id="terminal" align="center" style="box-sizing: border-box;">
+    <div class="container">
+        <div class="row">
+            <div style="width:100%; overflow: auto; height:500px">
+                <table class="centered highlight" style="width:100%; font-family: 'Open Sans', sans-serif;">
+                    <thead>
+                        <tr>
+                            <th class="col terminal_row_10">Time</th>
+                            <th class="col terminal_row_10">Count</th>
+                            <th class="col terminal_row_60">Message</th>
+                            <th class="col terminal_row_20">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="terminal">
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -80,9 +139,36 @@
             // })
 
             $.getJSON("/diagnostic_status", function(data) {
-                var new_div = document.createElement('div');
-                new_div.innerHTML = data;
-                $("#terminal").append(new_div);
+
+                // If exception status then skip
+
+                var date = new Date();
+
+                var new_row = document.createElement("tr");
+
+                var new_col1 = document.createElement("th");
+                var new_col2 = document.createElement("th");
+                var new_col3 = document.createElement("th");
+                var new_col4 = document.createElement("th");
+
+                new_col1.className = "col terminal_row_10";
+                new_col2.className = "col terminal_row_10";
+                new_col3.className = "col terminal_row_60";
+                new_col4.className = "col terminal_row_20";
+
+                new_col1.innerHTML = date.getHours() + ":" + date.getMinutes();
+                new_col2.innerHTML = data["count"];
+                new_col3.innerHTML = data["message"];
+                new_col4.innerHTML = data["status"];
+
+                new_row.appendChild(new_col1);
+                new_row.appendChild(new_col2);
+                new_row.appendChild(new_col3);
+                new_row.appendChild(new_col4);
+
+                console.log(data);
+                console.log(new_row);
+                $("#terminal").append(new_row);
             });
 
         }
@@ -140,11 +226,11 @@
         }
 
         // On click call update
-        $("button#Play").bind("click",  function() { send_command_packet("PLAY");  });
-        $("button#Pause").bind("click", function() { send_command_packet("PAUSE"); });
-        $("button#Stop").bind("click",  function() { send_command_packet("STOP");  });
-        $("button#Prev").bind("click",  function() { send_command_packet("PREV");  });
-        $("button#Next").bind("click",  function() { read_diagnostic_packet(); });
+        $("a#Play").bind("click",  function() { send_command_packet("PLAY");  });
+        $("a#Pause").bind("click", function() { send_command_packet("PAUSE"); });
+        $("a#Stop").bind("click",  function() { send_command_packet("STOP");  });
+        $("a#Prev").bind("click",  function() { send_command_packet("PREV");  });
+        $("a#Next").bind("click",  function() { read_diagnostic_packet(); });
         //{ send_command_packet("NEXT");  });
 
     </script>

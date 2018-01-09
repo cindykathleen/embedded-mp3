@@ -6,15 +6,15 @@ import http.server
 import threading
 import os
 
-from commands import send_command_packet
+from commands import create_command_packet
 from diagnostics import DiagnosticPacket
 
 # Constant parameters
 HTTP_PORT   = 8000
 SERVER_PORT = 7000
 CLIENT_PORT = 5000
-IP          = "0.0.0.0"
-SERVER_IP   = "192.168.1.229"
+IP          = "localhost"
+SERVER_IP   = "192.168.5.227"
 CLIENT_IP   = "192.168.1.250"
 
 # Set logging level
@@ -51,7 +51,7 @@ def diagnostic_task():
         client, addr = server_socket.accept()
         packet = client.recv(1024)
         packet = DiagnosticPacket(packet)
-        packet.print()
+        print(packet.get_payload())
         client.close()
 
 
@@ -79,7 +79,7 @@ def command_task():
                 pass
 
         # Send a packet
-        packet = send_command_packet("PACKET_TYPE_COMMAND_READ", "PACKET_OPCODE_GET_STATUS", 0, 0)
+        packet = create_command_packet("PACKET_TYPE_COMMAND_READ", "PACKET_OPCODE_GET_STATUS", 0, 0)
         print(str.encode(packet))
         client_socket.send(str.encode(packet))
         client_socket.close()
@@ -94,7 +94,7 @@ def main():
     threads = [
         # threading.Thread(target=host_http_server),
         threading.Thread(target=diagnostic_task),
-        threading.Thread(target=command_task)
+        # threading.Thread(target=command_task)
     ]
 
     for thread in threads:
